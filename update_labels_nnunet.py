@@ -4,7 +4,8 @@ import numpy as np
 from progress.bar import Bar
 
 path_nnunet_folder = '/home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/data/nnunet_data/nnUNet_raw/Dataset100_TotalSegMRI'
-path_new_folder = '/home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/data/nnunet_data/nnUNet_raw/Dataset101_TotalSegMRI'
+path_new_folder = '/home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/data/nnunet_data/nnUNet_raw/Dataset102_discs-1class'
+one_class = True
 
 label_folder = 'labelsTr'
 img_folder = 'imagesTr'
@@ -35,7 +36,7 @@ for label_path in labels_path:
         data = label.data
         new_data = np.zeros_like(data)
         for i, num in enumerate(discs_indx):
-            new_data[np.where(data==num)] = int(i + 1)
+            new_data[np.where(data==num)] = int(i + 1) if not one_class else 1
         label.data = new_data
         label.save(new_label_path)
         img.save(new_img_path)
