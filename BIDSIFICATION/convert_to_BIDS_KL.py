@@ -104,7 +104,7 @@ def create_participants_tsv(participants_tsv_list, path_output):
     """
     with open(os.path.join(path_output, 'participants.tsv'), 'w') as tsv_file:
         tsv_writer = csv.writer(tsv_file, delimiter='\t', lineterminator='\n')
-        tsv_writer.writerow(['participant_id', 'data_id'])
+        tsv_writer.writerow(['participant_id', 'source_id'])
         participants_tsv_list = sorted(participants_tsv_list, key=lambda a : a[0])
         for item in participants_tsv_list:
             tsv_writer.writerow(item)
@@ -123,7 +123,7 @@ def create_participants_json(path_output):
             "Description": "Unique Participant ID",
             "LongName": "Participant ID"
         },
-        "data_id": {
+        "source_id": {
             "Description": "Original subject name"
         }
     }
@@ -138,16 +138,10 @@ def create_dataset_description(path_output):
     """
     data_json = {
         "BIDSVersion": "BIDS 1.8.0",
-        "Name": "whole-spine",
+        "Name": "lumbar-vanderbilt",
         "DatasetType": "derivative",
         "Authors": [
-            "Nathan Molinier",
-            "Sandrine Bédard"
-        ],
-        "SourceDatasets": [
-            {
-                "URL": "bids::sourcedata"
-            }
+            "Nathan Molinier"
         ]
     }
     write_json(path_output, 'dataset_description.json', data_json)
@@ -161,7 +155,7 @@ def create_dataset_description_sourcedata(path_output):
     """
     data_json = {
         "BIDSVersion": "BIDS 1.8.0",
-        "Name": "whole-spine",
+        "Name": "lumbar-vanderbilt",
         "DatasetType": "raw"
     }
     if not os.path.isdir(path_output):
