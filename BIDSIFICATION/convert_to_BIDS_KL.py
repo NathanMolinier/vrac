@@ -120,10 +120,18 @@ def create_participants_tsv(participants_tsv_list, path_output):
     """
     with open(os.path.join(path_output, 'participants.tsv'), 'w') as tsv_file:
         tsv_writer = csv.writer(tsv_file, delimiter='\t', lineterminator='\n')
-        tsv_writer.writerow(['participant_id', 'source_id'])
+        tsv_writer.writerow(['participant_id', 'source_id', 'species', 'age', 'sex', 'pathology', 'institution', 'notes'])
+        
+        # Species
+        species = ['homo sapiens']
+
+        # Add missing information age --> notes
+        missing_data = ['n/a']*5
+
+        # Add rows to tsv file
         participants_tsv_list = sorted(participants_tsv_list, key=lambda a : a[0])
         for item in participants_tsv_list:
-            tsv_writer.writerow(item)
+            tsv_writer.writerow(list(item) + species + missing_data)
         logger.info(f'participants.tsv created in {path_output}')
 
 
@@ -141,6 +149,42 @@ def create_participants_json(path_output):
         },
         "source_id": {
             "Description": "Original subject name"
+        },
+        "species": {
+            "Description": "Binomial species name of participant",
+            "LongName": "Species"
+        },
+        "age": {
+            "Description": "Participant age",
+            "LongName": "Participant age",
+            "Units": "years"
+        },
+        "sex": {
+            "Description": "sex of the participant as reported by the participant",
+            "Levels": {
+                "M": "male",
+                "F": "female",
+                "O": "other"
+            }
+        },
+        "pathology": {
+            "Description": "The diagnosis of pathology of the participant",
+            "LongName": "Pathology name",
+            "Levels": {
+                "HC": "Healthy Control",
+                "DCM": "Degenerative Cervical Myelopathy (synonymous with CSM - Cervical Spondylotic Myelopathy)",
+                "MildCompression": "Asymptomatic cord compression, without myelopathy",
+                "MS": "Multiple Sclerosis",
+                "SCI": "Traumatic Spinal Cord Injury"
+            }
+        },
+        "institution": {
+            "Description": "Human-friendly institution name",
+            "LongName": "BIDS Institution ID"
+        },
+        "notes": {
+            "Description": "Additional notes about the participant. For example, if there is more information about a disease, indicate it here.",
+            "LongName": "Additional notes"
         }
     }
     write_json(path_output, 'participants.json', data_json)
@@ -244,7 +288,7 @@ def main():
         path_input = os.path.join(path_dataset, dir)
         if os.path.isdir(path_input):
             sub_list = sorted([d for d in os.listdir(path_input) if not d.startswith('.')])
-            derivative_path = 'derivatives/clinical-labels/'
+            derivative_path = 'derivatives/labels/'
             for sub in sub_list:
                 # Create sub_dict for QC control
                 sub_dict = dict()
@@ -276,29 +320,28 @@ def main():
 
                         # Fetch image type
                         if '_disc_labels' in file:
-                            img_type = 'MASK'
+                            img_type = 'LABEL'
                             suffix = 'dlabel'
-                            desc_entity = f'desc-{cont}'
-                            comp_entity = 'seg-discs'
+                            comp_entity = 'label-discs'
                         elif '_gmseg' in file:
-                            img_type = 'MASK'
-                            suffix = 'mask'
-                            desc_entity = f'desc-{cont}'
+                            img_type = 'LABEL'
+                            suffix = 'seg'
                             comp_entity = 'label-GM'
                         elif '_seg' in file:
-                            img_type = 'MASK'
-                            suffix = 'mask'
-                            desc_entity = f'desc-{cont}'
+                            img_type = 'LABEL'
+                            suffix = 'seg'
                             comp_entity = 'label-SC'
                         else:
                             img_type = 'IMAGE'
-                            suffix = cont
-
+                        
+                        # Create image filename
+                        img_filename = "_".join([subject_name_bids, acq_entity, cont])
+                        
                         if img_type == 'IMAGE':
                             # Construct path for the output IMAGE
                             path_subject_folder_out = os.path.join(path_output, subject_name_bids, 'anat')
                             create_subject_folder_if_not_exists(path_subject_folder_out)
-                            filename_out = "_".join([subject_name_bids, acq_entity, suffix + '.nii.gz'])
+                            filename_out = img_filename + '.nii.gz'
                             path_file_out = os.path.join(path_subject_folder_out, filename_out)
 
                             # Add paths to dict for QC control
@@ -309,20 +352,23 @@ def main():
                             # Copy nii
                             copy_nii(path_file_in, path_file_out)
 
-                        elif img_type == 'MASK':
+                        elif img_type == 'LABEL':
                             # Construct path for the output MASK
                             path_subject_folder_out = os.path.join(path_output, derivative_path, subject_name_bids, 'anat')
                             create_subject_folder_if_not_exists(path_subject_folder_out)
-                            filename_out = "_".join([subject_name_bids, acq_entity, comp_entity, desc_entity, suffix + '.nii.gz'])
+                            filename_out = "_".join([img_filename, comp_entity, suffix + '.nii.gz'])
                             path_file_out = os.path.join(path_subject_folder_out, filename_out)
 
                             # Add paths to dict for QC control
-                            if f'MASK_{comp_entity}' in sub_dict.keys():
+                            if f'LABEL_{comp_entity}' in sub_dict.keys():
                                 raise ValueError(f'Mutiple masks {comp_entity} were detected')
-                            sub_dict[f'MASK_{comp_entity}'] = {'path_file_in':path_file_in, 'path_file_out':path_file_out}
+                            sub_dict[f'LABEL_{comp_entity}'] = {'path_file_in':path_file_in, 'path_file_out':path_file_out}
+                        
+                        else:
+                            raise ValueError('Wrong img_type detected')
 
                 for img_type, dict_paths in sub_dict.items():
-                    if img_type.startswith('MASK'):
+                    if img_type.startswith('LABEL'):
                         # Load raw image
                         img_path = sub_dict['IMAGE']['path_file_in']
                         img = Image(img_path)
@@ -350,7 +396,7 @@ def main():
                         elif img_type.split('_')[1] == 'label-GM':
                             # Add corresponding sct function
                             corr_sct_function = 'sct_deepseg_gm'
-                        elif img_type.split('_')[1] == 'seg-discs':
+                        elif img_type.split('_')[1] == 'label-discs':
                             # Add corresponding sct function
                             corr_sct_function = 'sct_label_utils'
                         else:
