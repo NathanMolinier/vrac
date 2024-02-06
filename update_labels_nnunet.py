@@ -1,4 +1,4 @@
-from image import Image
+from BIDSIFICATION.image import Image
 import os
 import numpy as np
 from progress.bar import Bar
