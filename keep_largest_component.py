@@ -18,7 +18,7 @@ def get_parser():
         formatter_class=argparse.RawTextHelpFormatter
     )
     parser.add_argument(
-        '--seg-in', '-s', type=str, required=True,
+        '--seg-in', type=str, required=True,
         help='Input segmentation path'
     )
     parser.add_argument(
