@@ -55,8 +55,8 @@ for FILE_PATH in $FILES; do
     NEW_JSON_PATH=${NEW_SEG_PATH/".nii.gz"/".json"}
 
     # Copy segmentation
-    echo "cp ${SEG_PATH} ${NEW_SEG_PATH}"
-    echo "cp ${JSON_PATH} ${NEW_JSON_PATH}"
+    cp "${SEG_PATH}" "${NEW_SEG_PATH}"
+    cp "${JSON_PATH}" "${NEW_JSON_PATH}"
 
 done
 
