@@ -50,9 +50,13 @@ for FILE_PATH in $FILES; do
     SEG_PATH="${BIDS_DERIVATIVES}/${SUB_PATH}/${SEG_FILE_NAME}"
     NEW_SEG_PATH="${NEW_BIDS_DERIVATIVES}/${SUB_PATH}/${SEG_FILE_NAME}"
     
+    # JSON path
+    JSON_PATH=${SEG_PATH/".nii.gz"/".json"}
+    NEW_JSON_PATH=${NEW_SEG_PATH/".nii.gz"/".json"}
 
     # Copy segmentation
-    echo "cp ${SEG_PATH} ${SEG_PATH}"
+    echo "cp ${SEG_PATH} ${NEW_SEG_PATH}"
+    echo "cp ${JSON_PATH} ${NEW_JSON_PATH}"
 
 done
 
