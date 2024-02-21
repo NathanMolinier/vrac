@@ -48,11 +48,18 @@ for FILE_PATH in $FILES; do
     BIDS_DERIVATIVES="${BIDS_FOLDER}/derivatives/${DERIVATIVE_FOLDER}"
     NEW_BIDS_DERIVATIVES="${BIDS_FOLDER}/derivatives/${NEW_DERIVATIVE_FOLDER}"
     SEG_PATH="${BIDS_DERIVATIVES}/${SUB_PATH}/${SEG_FILE_NAME}"
-    NEW_SEG_PATH="${NEW_BIDS_DERIVATIVES}/${SUB_PATH}/${SEG_FILE_NAME}"
+    NEW_SEG_FOLDER="${NEW_BIDS_DERIVATIVES}/${SUB_PATH}/"
+    NEW_SEG_PATH="${NEW_SEG_FOLDER}/${SEG_FILE_NAME}"
     
     # JSON path
     JSON_PATH=${SEG_PATH/".nii.gz"/".json"}
     NEW_JSON_PATH=${NEW_SEG_PATH/".nii.gz"/".json"}
+
+    # Create DERIVATIVES_FOLDER if missing
+    if [[ ! -d ${NEW_SEG_FOLDER} ]]; then
+        echo "Creating folders $NEW_SEG_FOLDER"
+        mkdir -p "${NEW_SEG_FOLDER}"
+    fi
 
     # Copy segmentation
     cp "${SEG_PATH}" "${NEW_SEG_PATH}"
