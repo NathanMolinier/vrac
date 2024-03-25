@@ -35,8 +35,14 @@ new_seg.save(new_hd_sc_path)
 res_sc_path = os.path.join(out_dir, sc_name.replace('.nii.gz', '_res.nii.gz'))
 subprocess.check_call(['sct_resample',
                        '-i', new_hd_sc_path,
-                        '-mm', f'{str(px)}x{str(py)}x{str(pz)}', 
-                        '-o', res_sc_path,])
+                       '-x', 'linear',
+                       '-mm', f'{str(px)}x{str(py)}x{str(pz)}',
+                       '-o', res_sc_path,])
+
+subprocess.check_call(['sct_maths',
+                       '-i', res_sc_path,
+                       '-bin', '0',
+                       '-o', res_sc_path,])
 
 res_seg = Image(res_sc_path).change_orientation('RPI')
 
