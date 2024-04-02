@@ -6,7 +6,7 @@ import subprocess
 import numpy as np
 import shutil
 
-bids_path = '/home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/data/datasets/canproco'
+bids_path = '/home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/data/datasets/test-canproco'
 derivatives_path = 'derivatives/labels'
 resample = True
 
@@ -65,7 +65,7 @@ for sub in os.listdir(bids_path):
                     # Binarize mask
                     subprocess.check_call(['sct_maths',
                                         '-i', sc_path,
-                                        '-bin', '0',
+                                        '-bin', '0.5',
                                         '-o', sc_path,])
 
                 # Remove tempdir
