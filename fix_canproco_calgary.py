@@ -68,6 +68,13 @@ for sub in os.listdir(bids_path):
                                         '-bin', '0.5',
                                         '-o', sc_path,])
 
+                # QC segmentations
+                subprocess.check_call(['sct_qc',
+                                        '-i', img_path,
+                                        '-s', sc_path,
+                                        '-p', 'sct_deepseg_sc',
+                                        '-qc', os.path.join(bids_path, 'qc'),])
+
                 # Remove tempdir
                 shutil.rmtree(tmpdir)
 print("missing files:\n" + '\n'.join(sorted(missing_files)))
