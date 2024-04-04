@@ -1,5 +1,6 @@
 from BIDSIFICATION.image import Image, zeros_like
 from utils.utils import tmp_create
+from create_jsonsidecars import create_json_file
 
 import os
 import subprocess
@@ -26,7 +27,7 @@ for sub in os.listdir(bids_path):
                 nx, ny, nz, nt, px, py, pz, pt = img.dim
                 snx, sny, snz, snt, spx, spy, spz, spt = seg.dim
 
-                if sny == 320 and snz == 320 and ny == 512 and nz == 512 and py == spy and pz == spz:
+                if sny != ny and snz != nz and py == spy and pz == spz:
                     print(f'Fixing subject {sub}')
                     
                     # Save image to RPI orientation
@@ -57,10 +58,11 @@ for sub in os.listdir(bids_path):
                     # Resample to same resolution as the image
                     if resample:
                         # Resample to original image resolution with linear interpolation
+                        resampling = f'{str(px)}x{str(py)}x{str(pz)}'
                         subprocess.check_call(['sct_resample',
                                             '-i', sc_path,
                                             '-x', 'linear',
-                                            '-mm', f'{str(px)}x{str(py)}x{str(pz)}',
+                                            '-mm', resampling,
                                             '-o', sc_path,])
                         
                         # Binarize mask
@@ -68,6 +70,9 @@ for sub in os.listdir(bids_path):
                                             '-i', sc_path,
                                             '-bin', '0.5',
                                             '-o', sc_path,])
+                        
+                        # Create JSON sidecars
+                        create_json_file(sc_path.replace('.nii.gz', '.json'), resampling)
 
                     # QC segmentations
                     subprocess.check_call(['sct_qc',
