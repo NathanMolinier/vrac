@@ -1,3 +1,7 @@
+'''
+Related to https://github.com/neuropoly/data-management/issues/305#issuecomment-2045889662
+'''
+
 from BIDSIFICATION.image import Image, zeros_like
 from utils.utils import tmp_create
 from create_jsonsidecars import create_json_file
