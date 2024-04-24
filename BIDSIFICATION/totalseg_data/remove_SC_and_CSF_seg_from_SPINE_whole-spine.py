@@ -20,7 +20,7 @@ def main():
     bids_folder = '/Users/nathan/data/whole-spine'
     derivatives_path = os.path.join(bids_folder, 'derivatives/labels')
     qc_path = os.path.join(bids_folder, 'qc')
-    SC_value = 92
+    SC_value = 200
     CSF_value = 201
 
     err = []
