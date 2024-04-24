@@ -8,7 +8,7 @@ import datetime
 import csv
 import time
 import subprocess
-from image import Image
+from vrac.data_management.image import Image
 
 # Initialize logging
 logger = logging.getLogger(__name__)

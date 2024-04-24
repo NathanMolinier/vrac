@@ -1,7 +1,7 @@
 import os
 import argparse
 import numpy as np
-from BIDSIFICATION.image import Image
+from vrac.data_management.image import Image
 
 
 def get_parser():
@@ -14,15 +14,7 @@ def get_parser():
     return parser
 
 
-def main():
-    parser = get_parser()
-    args = parser.parse_args()
-
-    fname_mask = args.i
-    fname_seg = args.seg
-    fname_file_out = args.o
-    val = args.val
-
+def add_mask_to_seg(fname_mask, fname_seg, fname_file_out, val):
     # Check if output directory exists
     if not os.path.exists(os.path.dirname(fname_file_out)):
         os.makedirs(os.path.dirname(fname_file_out))
@@ -38,14 +30,14 @@ def main():
     mask = Image(fname_mask)
     seg = Image(fname_seg)
 
-    # Check image size
-    if mask.data.shape != seg.data.shape:
-        raise ValueError(f'Input mask and output segmentation should have the same shape !')
-
     # Check orientation
     if mask.orientation != seg.orientation:
         print(f'Changing mask orientation to {seg.orientation}')
         mask.change_orientation(seg.orientation)
+    
+    # Check image size
+    if mask.data.shape != seg.data.shape:
+        raise ValueError(f'Input mask and output segmentation should have the same shape !')
     
     # Check if mask is binary
     if not np.sort(np.unique(mask.data)).tolist() == [0,1]:
@@ -65,4 +57,12 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    parser = get_parser()
+    args = parser.parse_args()
+
+    fname_mask = args.i
+    fname_seg = args.seg
+    fname_file_out = args.o
+    val = args.val
+
+    add_mask_to_seg(fname_mask, fname_seg, fname_file_out, val)

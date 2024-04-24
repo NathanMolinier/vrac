@@ -1,4 +1,4 @@
-from BIDSIFICATION.image import Image
+from vrac.data_management.image import Image
 import os
 import numpy as np
 from progress.bar import Bar
