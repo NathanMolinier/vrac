@@ -5,12 +5,14 @@ This script fixes the format of json sidecars
 import json
 import os
 
+from vrac.data_management.image import Image
+from vrac.data_management.utils import get_img_path_from_label_path
 
 def main():
     # Add variables
     bids_folder = '/Users/nathan/data/data-spinegeneric-fix'
     
-    with open(os.path.join(bids_folder, 'changed_files.txt')) as f:
+    with open(os.path.join(bids_folder, 'changed_json.txt')) as f:
         changed_files = [os.path.join(bids_folder, file.replace('\n','')) for file in f.readlines()]
     
     for path in changed_files:
@@ -18,10 +20,24 @@ def main():
             raise ValueError(f'File {path} is missing !')
         else:
             if path.endswith('.json'):
-                # Edit json sidecars
-                if 'space-other' in path:
-                    edit_json_file(path, orig=False)
+                label_path = path.replace('.json', '.nii.gz')
+
+                if 'dwi' in label_path:
+                    img_path = get_img_path_from_label_path(label_path.replace('_rec-average',''))
                 else:
+                    img_path = get_img_path_from_label_path(label_path)
+
+                # Load image in RPI
+                img = Image(img_path).change_orientation('RPI')
+
+                # Load label in RPI
+                label = Image(label_path).change_orientation('RPI')
+
+                # Check if equal size
+                if img.dim[:3] != label.dim[:3]:
+                    raise ValueError(f"Size mismatch with label {label_path}")
+                else:
+                    # Edit json sidecars
                     edit_json_file(path, orig=True)
 
 
@@ -70,6 +86,10 @@ def edit_json_file(path_json_out, orig):
                     "Description": old_json["GeneratedBy"][0]["Description"]
                 }
                 )
+            elif "Warp from T2w" in old_json["GeneratedBy"][0]["Description"]:
+                data_json["GeneratedBy"].append(old_json["GeneratedBy"][0])
+            else:
+                raise ValueError(f"Unknow json for file {path_json_out}")
         else:
             raise ValueError(f"{len(old_json["GeneratedBy"])} dict in GeneratedBy please act")
         
