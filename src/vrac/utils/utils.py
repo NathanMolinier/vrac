@@ -9,3 +9,12 @@ def tmp_create(basename):
     tmpdir = tempfile.mkdtemp(prefix=prefix)
     print(f"Creating temporary folder ({tmpdir})")
     return tmpdir
+
+##
+def normalize(arr):
+    '''
+    Normalize image
+    '''
+    ma = arr.max()
+    mi = arr.min()
+    return ((arr - mi) / (ma - mi + 0.00001))
