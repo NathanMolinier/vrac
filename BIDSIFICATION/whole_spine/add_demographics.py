@@ -79,7 +79,7 @@ def main():
         if len(ws_dict[ws_id]) < len(new_fields):
             ws_dict[ws_id] = ws_dict[ws_id] + ['homo sapiens'] + ['n/a']*(len(new_fields)-len(ws_dict[ws_id]) -2) + [ws_id[:3]]
         for i, val in enumerate(ws_dict[ws_id]):
-            if not val:
+            if not val or val == '-':
                 ws_dict[ws_id][i] = 'n/a'
 
     # Write tsv file
