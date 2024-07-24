@@ -13,6 +13,8 @@ from torch.nn.modules.conv import _ConvNd
 from torch.nn.modules.dropout import _DropoutNd
 import numpy as np
 
+from vrac.plot.plot import save_features
+
 
 class PlainConvUNet(nn.Module):
     def __init__(self,
@@ -259,8 +261,11 @@ class PlainConvEncoder(nn.Module):
 
     def forward(self, x):
         ret = []
-        for s in self.stages:
+        save_features(x, path_out='/home/GRAMES.POLYMTL.CA/p118739/data/datasets/test-totalSpineSeg/test/layers/input.png')
+        save_features(x, path_out='test.png')
+        for i, s in enumerate(self.stages):
             x = s(x)
+            save_features(x, path_out=f'/home/GRAMES.POLYMTL.CA/p118739/data/datasets/test-totalSpineSeg/test/layers/encoder_{i}.png')
             ret.append(x)
         if self.return_skips:
             return ret
@@ -378,6 +383,7 @@ class UNetDecoder(nn.Module):
             x = self.transpconvs[s](lres_input)
             x = torch.cat((x, skips[-(s+2)]), 1)
             x = self.stages[s](x)
+            save_features(x, path_out=f'/home/GRAMES.POLYMTL.CA/p118739/data/datasets/test-totalSpineSeg/test/layers/decoder_{s}.png')
             if self.deep_supervision:
                 seg_outputs.append(self.seg_layers[s](x))
             elif s == (len(self.stages) - 1):
@@ -391,6 +397,7 @@ class UNetDecoder(nn.Module):
             r = seg_outputs[0]
         else:
             r = seg_outputs
+        save_features(r, path_out=f'/home/GRAMES.POLYMTL.CA/p118739/data/datasets/test-totalSpineSeg/test/layers/output.png')
         return r
 
     def compute_conv_feature_map_size(self, input_size):
