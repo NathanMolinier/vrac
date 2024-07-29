@@ -2,11 +2,15 @@ from nnunetv2.paths import nnUNet_results, nnUNet_raw
 import torch
 from batchgenerators.utilities.file_and_folder_operations import join
 from custom_predictor_nnunet import nnUNetPredictor
+import os
 
 def main():
-    nnunet_model = 'Dataset146_nako_manual_inference_plus_spider_143/nnUNetTrainer__nnUNetPlans__3d_fullres'
-    test_image = '/home/GRAMES.POLYMTL.CA/p118739/data/datasets/test-totalSpineSeg/raw/sub-242186_acq-sagittal_T2w.nii.gz'
-    out_image = '/home/GRAMES.POLYMTL.CA/p118739/data/datasets/test-totalSpineSeg/test/sub-242186_acq-sagittal_T2w_label-spine_dseg.nii.gz'
+    nnunet_model1 = 'Dataset348_DiscsVertebrae/nnUNetTrainerFT__new_plans__3d_fullres'
+    nnunet_model2 = 'Dataset146_nako_manual_inference_plus_spider_143/nnUNetTrainer__nnUNetPlans__3d_fullres'
+    test_image = '/home/GRAMES.POLYMTL.CA/p118739/data/datasets/test-totalSpineSeg/raw/sub-242186_acq-sagittal_T2w.nii.gz' # SPINEPS good
+    #test_image = '/home/GRAMES.POLYMTL.CA/p118739/data/datasets/test-totalSpineSeg/raw/sub-spineGeneric003_T1w.nii.gz' # totalSpineSeg good
+    out_folder = '/home/GRAMES.POLYMTL.CA/p118739/data/datasets/test-totalSpineSeg/test/'
+    out_image = os.path.join(out_folder, os.path.basename(test_image).replace('.nii.gz', '_label-spine_dseg.nii.gz'))
 
     # instantiate the nnUNetPredictor
     predictor = nnUNetPredictor(
@@ -20,10 +24,14 @@ def main():
         allow_tqdm=True
     )
     # initializes the network architecture, loads the checkpoint
-    predictor.initialize_from_trained_model_folder(
-        join(nnUNet_results, nnunet_model),
-        use_folds=(0,),
-        checkpoint_name='checkpoint_final.pth',
+    predictor.initialize_from_combined_weights(
+        join(nnUNet_results, nnunet_model1),
+        join(nnUNet_results, nnunet_model2),
+        fold1=0,
+        fold2=0,
+        checkpoint1_name='checkpoint_best.pth',
+        checkpoint2_name='checkpoint_final.pth',
+        alpha=0.8
     )
 
     # use list of files as inputs

@@ -6,6 +6,7 @@ from copy import deepcopy
 from time import sleep
 from typing import Tuple, Union, List, Optional
 import pydoc
+from numpy.random import choice
 
 import numpy as np
 import torch
@@ -93,6 +94,103 @@ class nnUNetPredictor(object):
                     'inference_allowed_mirroring_axes' in checkpoint.keys() else None
 
             parameters.append(checkpoint['network_weights'])
+
+        configuration_manager = plans_manager.get_configuration(configuration_name)
+        # restore network
+        num_input_channels = determine_num_input_channels(plans_manager, configuration_manager, dataset_json)
+
+        architecture_kwargs = dict(**configuration_manager.network_arch_init_kwargs)
+        for ri in configuration_manager.network_arch_init_kwargs_req_import:
+            if architecture_kwargs[ri] is not None:
+                architecture_kwargs[ri] = pydoc.locate(architecture_kwargs[ri])
+        
+        network = PlainConvUNet(
+            input_channels=num_input_channels,
+            num_classes=plans_manager.get_label_manager(dataset_json).num_segmentation_heads,
+            **architecture_kwargs 
+        )
+
+        self.plans_manager = plans_manager
+        self.configuration_manager = configuration_manager
+        self.list_of_parameters = parameters
+        self.network = network
+        self.dataset_json = dataset_json
+        self.trainer_name = trainer_name
+        self.allowed_mirroring_axes = inference_allowed_mirroring_axes
+        self.label_manager = plans_manager.get_label_manager(dataset_json)
+        if ('nnUNet_compile' in os.environ.keys()) and (os.environ['nnUNet_compile'].lower() in ('true', '1', 't')) \
+                and not isinstance(self.network, OptimizedModule):
+            print('Using torch.compile')
+            self.network = torch.compile(self.network)
+    
+    def initialize_from_combined_weights(self, 
+                                         model1_training_output_dir: str,
+                                         model2_training_output_dir: str,
+                                         fold1: int,
+                                         fold2: int,
+                                         checkpoint1_name: str = 'checkpoint_final.pth',
+                                         checkpoint2_name: str = 'checkpoint_final.pth',
+                                         alpha: float = 0.5):
+        """
+        This is used when combining trained model weights for inference.
+
+        Based on https://arxiv.org/pdf/2109.01903
+        """
+
+        dataset_json = load_json(join(model1_training_output_dir, 'dataset.json'))
+        plans = load_json(join(model1_training_output_dir, 'plans.json'))
+        plans_manager = PlansManager(plans)
+
+        # Load state dicts from checkpoints 
+        parameters = []
+        f1 = int(fold1) if fold1 != 'all' else fold1
+        checkpoint1 = torch.load(join(model1_training_output_dir, f'fold_{f1}', checkpoint1_name),
+                                map_location=torch.device('cpu'))
+        f2 = int(fold2) if fold2 != 'all' else fold2
+        checkpoint2 = torch.load(join(model2_training_output_dir, f'fold_{f2}', checkpoint2_name),
+                                map_location=torch.device('cpu'))
+        
+        # Combine network weights
+        new_checkpoint = {'network_weights':{}}
+        comb_type = 'kernel'
+        for layers_name in checkpoint1['network_weights'].keys():
+            layers1 = checkpoint1['network_weights'][layers_name]
+            layers2 = checkpoint2['network_weights'][layers_name]
+            if comb_type == 'average':
+                if 'encoder' in layers_name:
+                    new_checkpoint['network_weights'][layers_name] = layers1
+                elif 'decoder' in layers_name and 'seg_layers' not in layers_name:
+                    assert layers1.shape == layers2.shape
+                    new_checkpoint['network_weights'][layers_name] = alpha * layers1 + (1 - alpha) * layers2
+                elif 'seg_layers' in layers_name:
+                    new_checkpoint['network_weights'][layers_name] = layers1
+            elif comb_type == 'kernel':
+                if 'encoder' in layers_name:
+                    new_checkpoint['network_weights'][layers_name] = layers1
+                elif 'decoder' in layers_name and 'seg_layers' not in layers_name:
+                    assert layers1.shape == layers2.shape
+                    if len(layers1.shape) > 1:
+                        new_layers = torch.zeros_like(layers1)
+                        for i in range(layers1.shape[0]):
+                            draw = choice([1, 2], 1, p=[alpha, 1-alpha])[0]
+                            if draw == 1:
+                                new_layers[i] = layers1[i]
+                            elif draw == 2:
+                                new_layers[i] = layers2[i]
+                            else:
+                                raise ValueError(f'{draw} is not a possible output')
+                        new_checkpoint['network_weights'][layers_name] = new_layers
+                    else:
+                        new_checkpoint['network_weights'][layers_name] = alpha * layers1 + (1 - alpha) * layers2
+                elif 'seg_layers' in layers_name:
+                    new_checkpoint['network_weights'][layers_name] = layers1
+            
+        trainer_name = checkpoint1['trainer_name']
+        configuration_name = checkpoint1['init_args']['configuration']
+        inference_allowed_mirroring_axes = checkpoint1['inference_allowed_mirroring_axes'] if \
+            'inference_allowed_mirroring_axes' in checkpoint1.keys() else None
+
+        parameters.append(new_checkpoint['network_weights'])
 
         configuration_manager = plans_manager.get_configuration(configuration_name)
         # restore network
@@ -890,58 +988,3 @@ def predict_entry_point():
     #                           part_id=args.part_id,
     #                           device=device)
 
-
-if __name__ == '__main__':
-    # predict a bunch of files
-    from nnunetv2.paths import nnUNet_results, nnUNet_raw
-
-    predictor = nnUNetPredictor(
-        tile_step_size=0.5,
-        use_gaussian=True,
-        use_mirroring=True,
-        perform_everything_on_device=True,
-        device=torch.device('cuda', 0),
-        verbose=False,
-        verbose_preprocessing=False,
-        allow_tqdm=True
-    )
-    predictor.initialize_from_trained_model_folder(
-        join(nnUNet_results, 'Dataset003_Liver/nnUNetTrainer__nnUNetPlans__3d_lowres'),
-        use_folds=(0,),
-        checkpoint_name='checkpoint_final.pth',
-    )
-    predictor.predict_from_files(join(nnUNet_raw, 'Dataset003_Liver/imagesTs'),
-                                 join(nnUNet_raw, 'Dataset003_Liver/imagesTs_predlowres'),
-                                 save_probabilities=False, overwrite=False,
-                                 num_processes_preprocessing=2, num_processes_segmentation_export=2,
-                                 folder_with_segs_from_prev_stage=None, num_parts=1, part_id=0)
-
-    # predict a numpy array
-    from nnunetv2.imageio.simpleitk_reader_writer import SimpleITKIO
-
-    img, props = SimpleITKIO().read_images([join(nnUNet_raw, 'Dataset003_Liver/imagesTr/liver_63_0000.nii.gz')])
-    ret = predictor.predict_single_npy_array(img, props, None, None, False)
-
-    iterator = predictor.get_data_iterator_from_raw_npy_data([img], None, [props], None, 1)
-    ret = predictor.predict_from_data_iterator(iterator, False, 1)
-
-    # predictor = nnUNetPredictor(
-    #     tile_step_size=0.5,
-    #     use_gaussian=True,
-    #     use_mirroring=True,
-    #     perform_everything_on_device=True,
-    #     device=torch.device('cuda', 0),
-    #     verbose=False,
-    #     allow_tqdm=True
-    #     )
-    # predictor.initialize_from_trained_model_folder(
-    #     join(nnUNet_results, 'Dataset003_Liver/nnUNetTrainer__nnUNetPlans__3d_cascade_fullres'),
-    #     use_folds=(0,),
-    #     checkpoint_name='checkpoint_final.pth',
-    # )
-    # predictor.predict_from_files(join(nnUNet_raw, 'Dataset003_Liver/imagesTs'),
-    #                              join(nnUNet_raw, 'Dataset003_Liver/imagesTs_predCascade'),
-    #                              save_probabilities=False, overwrite=False,
-    #                              num_processes_preprocessing=2, num_processes_segmentation_export=2,
-    #                              folder_with_segs_from_prev_stage='/media/isensee/data/nnUNet_raw/Dataset003_Liver/imagesTs_predlowres',
-    #                              num_parts=1, part_id=0)
