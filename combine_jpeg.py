@@ -10,7 +10,7 @@ nb_column = 6
 col_list = []
 line_list = []
 img_name = []
-jpeg_list = [jpeg for jpeg in os.listdir(jpeg_folder) if '.jpg' in jpeg]
+jpeg_list = [jpeg for jpeg in os.listdir(jpeg_folder) if '.jpg' in jpeg and sub_string in jpeg]
 
 # Get max image shape for padding
 shape = []
@@ -46,4 +46,4 @@ for i, jpeg in enumerate(jpeg_list):
         print(f'Not considering {jpeg}')
 
 out_img = np.concatenate(line_list, axis=0)
-cv2.imwrite(os.path.join(jpeg_folder,'res.png'), out_img)
+cv2.imwrite(os.path.join(jpeg_folder,f'res_{sub_string}.png'), out_img)
