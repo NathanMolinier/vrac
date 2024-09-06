@@ -6,11 +6,16 @@ import numpy as np
 jpeg_folder = '/Users/nathan/Desktop/preview_freeze_decoder'
 sub_string = 'step1'
 
-nb_column = 6
 col_list = []
 line_list = []
 img_name = []
-jpeg_list = [jpeg for jpeg in os.listdir(jpeg_folder) if '.jpg' in jpeg]
+jpeg_list = [jpeg for jpeg in os.listdir(jpeg_folder) if '.jpg' in jpeg and sub_string in jpeg]
+
+# Extract optimal number of line and column
+power = np.ceil(np.log(len(jpeg_list))/np.log(2))
+nb_line = round(2**(power//2))
+nb_col = round(2**(power - power//2))
+assert nb_col*nb_line >= len(jpeg_list)
 
 # Get max image shape for padding
 shape = []
@@ -33,7 +38,7 @@ for i, jpeg in enumerate(jpeg_list):
         col_list.append(im)
         img_name.append(jpeg)
 
-        if len(col_list) == nb_column:
+        if len(col_list) == nb_col:
             line_list.append(np.concatenate(col_list, axis=1))
             col_list = []
         
@@ -46,4 +51,4 @@ for i, jpeg in enumerate(jpeg_list):
         print(f'Not considering {jpeg}')
 
 out_img = np.concatenate(line_list, axis=0)
-cv2.imwrite(os.path.join(jpeg_folder,'res.png'), out_img)
+cv2.imwrite(os.path.join(jpeg_folder,f'res_{sub_string}.png'), out_img)
