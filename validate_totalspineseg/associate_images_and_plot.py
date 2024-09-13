@@ -25,14 +25,13 @@ def text_to_image(
 
     return img
 
-jpeg_folder_raw = '/Users/nathan/Desktop/preview_raw'
-jpeg_folder_crop = '/Users/nathan/Desktop/preview_cropreg'
-sub_string = '_step2_output'
+jpeg_folder = ['/Users/nathan/Desktop/preview/preview_loc', '/Users/nathan/Desktop/preview/preview_reg', '/Users/nathan/Desktop/preview/preview_locreg', '/Users/nathan/Desktop/preview/preview_cropreg', '/Users/nathan/Desktop/preview/preview_locregcrop']
+sub_string = ''
 
 col_list = []
 line_list = []
 img_name = []
-jpeg_list = [jpeg for jpeg in os.listdir(jpeg_folder_raw) if '.jpg' in jpeg and sub_string in jpeg]
+jpeg_list = [jpeg for jpeg in os.listdir(jpeg_folder[0]) if '.jpg' in jpeg and sub_string in jpeg]
 
 # Extract optimal number of line and column
 power = np.ceil(np.log(len(jpeg_list))/np.log(2))
@@ -43,16 +42,15 @@ assert nb_col*nb_line >= len(jpeg_list)
 # Combine images after padding along rows and columns
 for i, jpeg in enumerate(jpeg_list):
     if sub_string in jpeg:
-        jpeg_path_raw = os.path.join(jpeg_folder_raw, jpeg)
-        jpeg_path_crop = os.path.join(jpeg_folder_crop, jpeg.replace(sub_string,''))
-        im_raw = np.array(Image.open(jpeg_path_raw))
-        im_crop = np.array(Image.open(jpeg_path_crop))
+        img_list = []
+        for folder in jpeg_folder:
+            jpeg_folder_path = os.path.join(folder, jpeg)
+            im = np.array(Image.open(jpeg_folder_path))
 
-        # Add short padding to the right
-        im_raw = np.pad(im_raw, pad_width=((0,0),(0,20),(0,0)), mode='constant')
+            img_list.append(im)
 
-        # Merge raw and crop version
-        im = np.concatenate((im_raw, im_crop), axis=1)
+        # Merge images + Add short padding to the right
+        im = np.concatenate([np.pad(im, pad_width=((0,0),(0,20),(0,0)), mode='constant') if i+1 < len(img_list) else im for i, im in enumerate(img_list)], axis=1)
 
         # Create title
         title = np.where(np.array(text_to_image(jpeg))[:,:,0]==255,255,0)
@@ -119,4 +117,4 @@ for i, jpeg in enumerate(jpeg_list):
         print(f'Not considering {jpeg}')
 
 out_img = np.concatenate(new_line, axis=0)
-cv2.imwrite(os.path.join(jpeg_folder_crop,f'validate_crop_{sub_string}.png'), out_img)
+cv2.imwrite(os.path.join(jpeg_folder[0],f'validate_crop_{sub_string}.png'), out_img)
