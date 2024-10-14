@@ -1,4 +1,4 @@
-from BIDSIFICATION.image import Image
+from vrac.data_management.image import Image
 import os
 import glob
 import cv2
