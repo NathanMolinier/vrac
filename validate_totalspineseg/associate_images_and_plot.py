@@ -25,96 +25,139 @@ def text_to_image(
 
     return img
 
-jpeg_folder = ['/Users/nathan/Desktop/preview/preview_loc', '/Users/nathan/Desktop/preview/preview_reg', '/Users/nathan/Desktop/preview/preview_locreg', '/Users/nathan/Desktop/preview/preview_cropreg', '/Users/nathan/Desktop/preview/preview_locregcrop']
-sub_string = ''
+def title2image(title, width, height):
+    """
+    :param title: String title
+    :param width: width in pixels
 
-col_list = []
-line_list = []
-img_name = []
-jpeg_list = [jpeg for jpeg in os.listdir(jpeg_folder[0]) if '.jpg' in jpeg and sub_string in jpeg]
-
-# Extract optimal number of line and column
-power = np.ceil(np.log(len(jpeg_list))/np.log(2))
-nb_line = round(2**(power//2))
-nb_col = round(2**(power - power//2))
-assert nb_col*nb_line >= len(jpeg_list)
-
-# Combine images after padding along rows and columns
-for i, jpeg in enumerate(jpeg_list):
-    if sub_string in jpeg:
-        img_list = []
-        for folder in jpeg_folder:
-            jpeg_folder_path = os.path.join(folder, jpeg)
-            im = np.array(Image.open(jpeg_folder_path))
-
-            img_list.append(im)
-
-        # Merge images + Add short padding to the right
-        im = np.concatenate([np.pad(im, pad_width=((0,0),(0,20),(0,0)), mode='constant') if i+1 < len(img_list) else im for i, im in enumerate(img_list)], axis=1)
-
-        # Create title
-        title = np.where(np.array(text_to_image(jpeg))[:,:,0]==255,255,0)
-        
-        # Keep title aspect ratio
-        gap = 50
-        ratio = (title.shape[1]+gap)/im.shape[1]
-        orig_shape_title = title.shape
-        title = Image.fromarray(title[:,:].astype(np.uint8))
-        title = np.array(title.resize((round(orig_shape_title[1]//ratio), round(orig_shape_title[0]//ratio)), Image.LANCZOS))
-        
-        # Repeat title along the third dimension
-        title = np.repeat(title[:,:,np.newaxis],3,axis=2)
-
-        # Pad title
-        width_pad = im.shape[1] - title.shape[1]
-        title = np.pad(title, pad_width=((0,0), (width_pad//2, im.shape[1] - title.shape[1] - width_pad//2), (0,0)))
-
-        # Concat title with images
-        im = np.concatenate((im, title), axis=0)
-
-        # Add padding to the side to distinguish images
-        im = np.pad(im, pad_width=((5,5),(5,5),(0,0)), mode='constant')
-        im = np.pad(im, pad_width=((5,5),(5,5),(0,0)), mode='constant', constant_values=255)
-        im = np.pad(im, pad_width=((5,5),(5,5),(0,0)), mode='constant')
-
-        col_list.append(im)
-
-        if i == len(jpeg_list)-1:
-            # Pad images to have same height
-            new_col = []
-            comb_vert_max = 0
-            for comb in col_list:
-                if comb.shape[0] > comb_vert_max:
-                    comb_vert_max = comb.shape[0]
-            for comb in col_list:
-                height = comb_vert_max - comb.shape[0]
-                new_col.append(np.pad(comb, pad_width=((height//2,height - height//2), (0,0), (0,0))))
-            line_list.append(np.concatenate(new_col, axis=1))
-
-            # Pad image to have same width
-            new_line = []
-            comb_horiz_max = 0
-            for comb in line_list:
-                if comb.shape[1] > comb_horiz_max:
-                    comb_horiz_max = comb.shape[1]
-            for comb in line_list:
-                width = comb_horiz_max - comb.shape[1]
-                new_line.append(np.pad(comb, pad_width=((0,0), (width//2,width - width//2), (0,0))))
-        
-        elif len(col_list) == nb_col:
-            # Pad image to have same height
-            new_col = []
-            comb_vert_max = 0
-            for comb in col_list:
-                if comb.shape[0] > comb_vert_max:
-                    comb_vert_max = comb.shape[0]
-            for comb in col_list:
-                height = comb_vert_max - comb.shape[0]
-                new_col.append(np.pad(comb, pad_width=((height//2,height - height//2), (0,0), (0,0))))
-            line_list.append(np.concatenate(new_col, axis=1))
-            col_list = []
+    :return: title as image
+    """
+    # Create title
+    title = np.where(np.array(text_to_image(title))[:,:,0]==255,255,0)
+    
+    # Keep title aspect ratio
+    ratio = (title.shape[0])/height
+    orig_shape_title = title.shape
+    title = Image.fromarray(title[:,:].astype(np.uint8))
+    if round(orig_shape_title[1]/ratio)<=width:
+        title = np.array(title.resize((round(orig_shape_title[1]/ratio), round(orig_shape_title[0]/ratio)), Image.LANCZOS))
     else:
-        print(f'Not considering {jpeg}')
+        ratio = width/height
+        title = np.array(title.resize((round(orig_shape_title[1]/ratio), round(orig_shape_title[0]/ratio)), Image.LANCZOS))
+    # Repeat title along the third dimension
+    title = np.repeat(title[:,:,np.newaxis],3,axis=2)
 
-out_img = np.concatenate(new_line, axis=0)
-cv2.imwrite(os.path.join(jpeg_folder[0],f'validate_crop_{sub_string}.png'), out_img)
+    # Pad title
+    width_pad = width - title.shape[1]
+    title = np.pad(title, pad_width=((0,0), (width_pad//2, width_pad - width_pad//2), (0,0)))
+
+    return title
+
+def main():
+    jpeg_folder = ['/Users/nathan/Desktop/preview/loc', '/Users/nathan/Desktop/preview/raw', '/Users/nathan/Desktop/preview/raw_loc']
+    titles = ['A', 'B', 'C']
+    sub_string = ''
+
+    col_list = []
+    line_list = []
+    img_name = []
+    jpeg_list = [jpeg for jpeg in os.listdir(jpeg_folder[0]) if '.jpg' in jpeg and sub_string in jpeg]
+    txt_height = 60
+
+    # Extract optimal number of line and column
+    power = np.ceil(np.log(len(jpeg_list))/np.log(2))
+    nb_line = round(2**(power//2))
+    nb_col = round(2**(power - power//2))
+    assert nb_col*nb_line >= len(jpeg_list)
+    
+    # Extract shape
+    shape = []
+    for i, jpeg in enumerate(jpeg_list):
+        if sub_string in jpeg:
+            for folder in jpeg_folder:
+                jpeg_folder_path = os.path.join(folder, jpeg)
+                im = np.array(Image.open(jpeg_folder_path))
+                shape.append(im.shape)
+    shape = np.array(shape)
+
+    # Combine images after padding along rows and columns
+    for i, jpeg in enumerate(jpeg_list):
+        if sub_string in jpeg:
+            img_list = []
+            shape_list = []
+            for title, folder in zip(titles, jpeg_folder):
+                jpeg_folder_path = os.path.join(folder, jpeg)
+                im = np.array(Image.open(jpeg_folder_path))
+
+                # Pad image
+                x_width = np.max(shape[:,0])-im.shape[0]
+                gap = 5
+                im = np.pad(im, pad_width=((x_width//2+gap,x_width - x_width//2),(0,0),(0,0)), mode='constant')
+
+                # Create title
+                title_img = title2image(title=title, width=im.shape[1], height=txt_height)
+
+                # Concatenate image and title
+                im = np.concatenate((title_img, im), axis=0)
+                img_list.append(im)
+                shape_list.append(im.shape)
+
+            # Merge images + Add short padding to the right
+            im = np.concatenate([np.pad(im, pad_width=((0,0),(0,20),(0,0)), mode='constant') if i+1 < len(img_list) else im for i, im in enumerate(img_list)], axis=1)
+
+            # Create title
+            contrast = jpeg.split('_sag')[0].split('_')[-1]
+            title_contrast = title2image(title=contrast, width=im.shape[1], height=txt_height)
+
+            # Concat title with images
+            im = np.concatenate((im, title_contrast), axis=0)
+            
+            # Add padding to the side to distinguish images
+            im = np.pad(im, pad_width=((10,10),(10,10),(0,0)), mode='constant')
+            im = np.pad(im, pad_width=((5,5),(5,5),(0,0)), mode='constant', constant_values=255)
+            im = np.pad(im, pad_width=((5,5),(5,5),(0,0)), mode='constant')
+
+            col_list.append(im)
+
+            if i == len(jpeg_list)-1:
+                # Pad images to have same height
+                new_col = []
+                comb_vert_max = 0
+                for comb in col_list:
+                    if comb.shape[0] > comb_vert_max:
+                        comb_vert_max = comb.shape[0]
+                for comb in col_list:
+                    height = comb_vert_max - comb.shape[0]
+                    new_col.append(np.pad(comb, pad_width=((height//2,height - height//2), (0,0), (0,0))))
+                line_list.append(np.concatenate(new_col, axis=1))
+
+                # Pad image to have same width
+                new_line = []
+                comb_horiz_max = 0
+                for comb in line_list:
+                    if comb.shape[1] > comb_horiz_max:
+                        comb_horiz_max = comb.shape[1]
+                for comb in line_list:
+                    width = comb_horiz_max - comb.shape[1]
+                    new_line.append(np.pad(comb, pad_width=((0,0), (width//2,width - width//2), (0,0))))
+            
+            elif len(col_list) == nb_col:
+                # Pad image to have same height
+                new_col = []
+                comb_vert_max = 0
+                for comb in col_list:
+                    if comb.shape[0] > comb_vert_max:
+                        comb_vert_max = comb.shape[0]
+                for comb in col_list:
+                    height = comb_vert_max - comb.shape[0]
+                    new_col.append(np.pad(comb, pad_width=((height//2,height - height//2), (0,0), (0,0))))
+                line_list.append(np.concatenate(new_col, axis=1))
+                col_list = []
+        else:
+            print(f'Not considering {jpeg}')
+
+    out_img = np.concatenate(new_line, axis=0)
+    cv2.imwrite(os.path.join(jpeg_folder[0],f'validate_crop_{sub_string}.png'), out_img)
+
+if __name__=='__main__':
+    main()
