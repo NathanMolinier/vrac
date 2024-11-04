@@ -55,8 +55,9 @@ def title2image(title, width, height):
 
     return title
 
+
 def main():
-    jpeg_folder = '/Users/nathan/Desktop/preview'
+    jpeg_folder = '/Users/nathan/Desktop/preview_sexy'
     sub_string = 'step2_output_tags'
 
     title_height = 60
@@ -89,24 +90,29 @@ def main():
     final_shape_dict = {}
     for cont in cont_dict.keys():
         img_list = []
+        raw_list = []
         shape = []
-        paths = []
         for jpeg_path in cont_dict[cont]:
             im = np.array(Image.open(jpeg_path))
+            raw = np.array(Image.open(jpeg_path.replace(sub_string, 'input')))
             img_list.append(im)
-            shape.append(im.shape) # Extract shapes
-            paths.append(jpeg_path)
+            raw_list.append(raw)
+            shape.append((im.shape[0], im.shape[1]*2, im.shape[2])) # Extract shapes
         shape = np.array(shape)
         if cont not in ['T1w','T2w']:
             col_list = []
-            for im in img_list:
-                x_width = np.max(shape[:, 0]) - im.shape[0]
-                y_width = np.max(shape[:, 1]) - im.shape[1]
-                im = np.pad(im, pad_width=((x_width//2,x_width-x_width//2), (y_width//2,y_width-y_width//2), (0,0)))
+            for im, raw in zip(img_list,raw_list):
+                # Concatenate raw and im
+                y_width = np.max(shape[:, 1]) - im.shape[1]*2
+                split_pad = y_width//3
+                raw = np.pad(raw, pad_width=((0,0), (0,split_pad), (0,0)))
+                im = np.concatenate((raw, im), axis=1)
+                im = np.pad(im, pad_width=((0,0), (split_pad,y_width-2*split_pad), (0,0)))
+                im = np.pad(im, pad_width=((3,3), (0,0), (0,0))) # Add extra padding between images
                 col_list.append(im)
 
             # Concatenate contrasts into a row
-            row = np.concatenate(col_list, axis=1)
+            row = np.concatenate(col_list, axis=0)
 
             # Create tile
             title = title2image(cont, width=row.shape[1], height=title_height)
@@ -132,16 +138,24 @@ def main():
             #cv2.imwrite('test.png', im)
             contrast_dict[cont]=im
             final_shape_dict[cont]=im.shape
-            
         else:
             big_list = []
             small_list = []
-            for im in img_list:
+            for im, raw in zip(img_list,raw_list):
                 if im.shape[0] == np.max(shape[:, 0]):
+                    # Concatenate raw and im
+                    y_width = np.max(shape[:, 1]) - im.shape[1]*2
+                    split_pad = y_width//3
+                    raw = np.pad(raw, pad_width=((0,0), (0,split_pad), (0,0)))
+                    im = np.concatenate((raw, im), axis=1)
                     big_list.append(im)
                 else: 
-                    y_width = np.max(shape[:, 1]) - im.shape[1]
-                    im = np.pad(im, pad_width=((2,2), (y_width//2+2,y_width-y_width//2+2), (0,0)))
+                    # Concatenate raw and im
+                    y_width = np.max(shape[:, 1]) - im.shape[1]*2
+                    split_pad = y_width//3
+                    raw = np.pad(raw, pad_width=((0,0), (0,split_pad), (0,0)))
+                    im = np.concatenate((raw, im), axis=1)
+                    im = np.pad(im, pad_width=((0,0), (split_pad,y_width-2*split_pad), (0,0)))
                     small_list.append(im)
             # Extract width of all the small images
             x_width_small_list = np.sum([im.shape[0] for im in small_list])
