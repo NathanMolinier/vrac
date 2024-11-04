@@ -37,15 +37,14 @@ def title2image(title, width, height):
     title = np.where(np.array(text_to_image(title))[:,:,0]==255,255,0)
     
     # Keep title aspect ratio
-    ratio = (title.shape[0])/height
     orig_shape_title = title.shape
+    ratio = (orig_shape_title[0])/height
     title = Image.fromarray(title[:,:].astype(np.uint8))
-    if round(orig_shape_title[0]/ratio)<=width:
-        title = np.array(title.resize((round(orig_shape_title[1]/ratio), round(orig_shape_title[0]/ratio)), Image.LANCZOS))
-    else:
-        ratio = width/height
-        title = np.array(title.resize((round(orig_shape_title[1]/ratio), round(orig_shape_title[0]/ratio)), Image.LANCZOS))
-
+    reduce_height = height
+    while round(orig_shape_title[1]/ratio)>width:
+        reduce_height -= 1
+        ratio = (orig_shape_title[0])/reduce_height
+    title = np.array(title.resize((round(orig_shape_title[1]/ratio), round(orig_shape_title[0]/ratio)), Image.LANCZOS))
     
     # Repeat title along the third dimension
     title = np.repeat(title[:,:,np.newaxis],3,axis=2)
