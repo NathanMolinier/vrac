@@ -71,11 +71,15 @@ def main():
         contrast = file.split('_sag')[0].split('_')[-1]
         if contrast == 'MTS':
             if 'mt-on' in file:
-                contrast = 'MTS on'
+                contrast = 'MT on'
             else:
-                contrast = 'MTS off'
+                contrast = 'MT off'
         if contrast == 'UNIT1':
-            contrast = 'MP2RAGE'
+            contrast = 'MP2RAGE-UNI'
+        if contrast == 'T2star':
+            contrast = 'T2*w'
+        if 'ct' in file:
+            contrast = 'CT'
         if not contrast in cont_dict.keys():
             cont_dict[contrast] = [file]
         else:
