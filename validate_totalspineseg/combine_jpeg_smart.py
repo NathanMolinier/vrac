@@ -217,49 +217,13 @@ def main():
             contrast_dict[cont]=im
             final_shape_dict[cont]=im.shape
     
-    # Merge figures
-    row_list = []
-    edge_dict = {}
-    final_shapes = np.array(list(final_shape_dict.values()))
-    for cont, cont_fig in contrast_dict.items():
-        if cont not in ['T1w', 'T2w', 'T2star', 'MP2RAGE']:
-            y_width = np.max(final_shapes[:, 1]) - cont_fig.shape[1]
-            cont_fig = np.pad(cont_fig, pad_width=((0,0), (y_width//2,y_width-y_width//2), (0,0)))
-            row_list.append(cont_fig)
-
-    # Concatenate rows
-    row_fig = np.concatenate(row_list, axis=0)
-
-    # Pad edge contrasts
-    for cont in ['T1w', 'T2w']:
-        # Concatenate MP2RAGE with T2w and T2star with T1w
-        im = contrast_dict[cont]
-        im2 = contrast_dict['T2star'] if cont=='T1w' else contrast_dict['MP2RAGE']
-        if im.shape[1] > im2.shape[1]:
-            y_width = im.shape[1] - im2.shape[1]
-            im2 = np.pad(im2, pad_width=((0,0), (y_width//2,y_width-y_width//2), (0,0)))
-        else:
-            y_width = im2.shape[1] - im.shape[1]
-            im = np.pad(im, pad_width=((0,0), (y_width//2,y_width-y_width//2), (0,0)))
-        edge_dict[cont]=np.concatenate((im2,im), axis=0)
-
-    # Identify max x
-    x_max = np.max([arr.shape[0] for arr in edge_dict.values()]+[row_fig.shape[0]])
-    if row_fig.shape[0] < x_max:
-        x_width = x_max - row_fig.shape[0]
-        row_fig = np.pad(row_fig, pad_width=((x_width//2,x_width-x_width//2), (0,0), (0,0)))
-    final_fig = row_fig
-
-    for cont,im in edge_dict.items():
-        if im.shape[0] < x_max:
-            x_width = x_max - im.shape[0]
-            im = np.pad(im, pad_width=((x_width//2,x_width-x_width//2), (0,0), (0,0)))
-        if cont == 'T1w':
-            final_fig = np.concatenate((im, final_fig), axis=1)
-        else:
-            final_fig = np.concatenate((final_fig, im), axis=1)
-
-    cv2.imwrite(os.path.join(jpeg_folder,f'sexy_{sub_string}.png'), final_fig)
+    # Save all figures in a final folder
+    sexy_folder = os.path.join(jpeg_folder,'out')
+    if not os.path.exists(sexy_folder):
+        os.makedirs(sexy_folder)
+    
+    for cont, im in contrast_dict.items():
+        cv2.imwrite(os.path.join(sexy_folder, f'{cont}.png'), im)
 
 if __name__=='__main__':
     main()
