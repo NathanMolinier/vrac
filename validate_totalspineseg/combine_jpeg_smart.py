@@ -37,15 +37,14 @@ def title2image(title, width, height):
     title = np.where(np.array(text_to_image(title))[:,:,0]==255,255,0)
     
     # Keep title aspect ratio
-    ratio = (title.shape[0])/height
     orig_shape_title = title.shape
+    ratio = (orig_shape_title[0])/height
     title = Image.fromarray(title[:,:].astype(np.uint8))
-    if round(orig_shape_title[0]/ratio)<=width:
-        title = np.array(title.resize((round(orig_shape_title[1]/ratio), round(orig_shape_title[0]/ratio)), Image.LANCZOS))
-    else:
-        ratio = width/height
-        title = np.array(title.resize((round(orig_shape_title[1]/ratio), round(orig_shape_title[0]/ratio)), Image.LANCZOS))
-
+    reduce_height = height
+    while round(orig_shape_title[1]/ratio)>width:
+        reduce_height -= 1
+        ratio = (orig_shape_title[0])/reduce_height
+    title = np.array(title.resize((round(orig_shape_title[1]/ratio), round(orig_shape_title[0]/ratio)), Image.LANCZOS))
     
     # Repeat title along the third dimension
     title = np.repeat(title[:,:,np.newaxis],3,axis=2)
@@ -56,8 +55,9 @@ def title2image(title, width, height):
 
     return title
 
+
 def main():
-    jpeg_folder = '/Users/nathan/Desktop/preview'
+    jpeg_folder = '/Users/nathan/Desktop/preview_sexy'
     sub_string = 'step2_output_tags'
 
     title_height = 60
@@ -71,11 +71,15 @@ def main():
         contrast = file.split('_sag')[0].split('_')[-1]
         if contrast == 'MTS':
             if 'mt-on' in file:
-                contrast = 'MTS on'
+                contrast = 'MT on'
             else:
-                contrast = 'MTS off'
+                contrast = 'MT off'
         if contrast == 'UNIT1':
-            contrast = 'MP2RAGE'
+            contrast = 'MP2RAGE-UNI'
+        if contrast == 'T2star':
+            contrast = 'T2*w'
+        if 'ct' in file:
+            contrast = 'CT'
         if not contrast in cont_dict.keys():
             cont_dict[contrast] = [file]
         else:
@@ -86,24 +90,29 @@ def main():
     final_shape_dict = {}
     for cont in cont_dict.keys():
         img_list = []
+        raw_list = []
         shape = []
-        paths = []
         for jpeg_path in cont_dict[cont]:
             im = np.array(Image.open(jpeg_path))
+            raw = np.array(Image.open(jpeg_path.replace(sub_string, 'input')))
             img_list.append(im)
-            shape.append(im.shape) # Extract shapes
-            paths.append(jpeg_path)
+            raw_list.append(raw)
+            shape.append((im.shape[0], im.shape[1]*2, im.shape[2])) # Extract shapes
         shape = np.array(shape)
         if cont not in ['T1w','T2w']:
             col_list = []
-            for im in img_list:
-                x_width = np.max(shape[:, 0]) - im.shape[0]
-                y_width = np.max(shape[:, 1]) - im.shape[1]
-                im = np.pad(im, pad_width=((x_width//2,x_width-x_width//2), (y_width//2,y_width-y_width//2), (0,0)))
+            for im, raw in zip(img_list,raw_list):
+                # Concatenate raw and im
+                y_width = np.max(shape[:, 1]) - im.shape[1]*2
+                split_pad = y_width//3
+                raw = np.pad(raw, pad_width=((0,0), (0,split_pad), (0,0)))
+                im = np.concatenate((raw, im), axis=1)
+                im = np.pad(im, pad_width=((0,0), (split_pad,y_width-2*split_pad), (0,0)))
+                im = np.pad(im, pad_width=((3,3), (0,0), (0,0))) # Add extra padding between images
                 col_list.append(im)
 
             # Concatenate contrasts into a row
-            row = np.concatenate(col_list, axis=1)
+            row = np.concatenate(col_list, axis=0)
 
             # Create tile
             title = title2image(cont, width=row.shape[1], height=title_height)
@@ -129,16 +138,24 @@ def main():
             #cv2.imwrite('test.png', im)
             contrast_dict[cont]=im
             final_shape_dict[cont]=im.shape
-            
         else:
             big_list = []
             small_list = []
-            for im in img_list:
+            for im, raw in zip(img_list,raw_list):
                 if im.shape[0] == np.max(shape[:, 0]):
+                    # Concatenate raw and im
+                    y_width = np.max(shape[:, 1]) - im.shape[1]*2
+                    split_pad = y_width//3
+                    raw = np.pad(raw, pad_width=((0,0), (0,split_pad), (0,0)))
+                    im = np.concatenate((raw, im), axis=1)
                     big_list.append(im)
                 else: 
-                    y_width = np.max(shape[:, 1]) - im.shape[1]
-                    im = np.pad(im, pad_width=((2,2), (y_width//2+2,y_width-y_width//2+2), (0,0)))
+                    # Concatenate raw and im
+                    y_width = np.max(shape[:, 1]) - im.shape[1]*2
+                    split_pad = y_width//3
+                    raw = np.pad(raw, pad_width=((0,0), (0,split_pad), (0,0)))
+                    im = np.concatenate((raw, im), axis=1)
+                    im = np.pad(im, pad_width=((0,0), (split_pad,y_width-2*split_pad), (0,0)))
                     small_list.append(im)
             # Extract width of all the small images
             x_width_small_list = np.sum([im.shape[0] for im in small_list])
@@ -200,49 +217,13 @@ def main():
             contrast_dict[cont]=im
             final_shape_dict[cont]=im.shape
     
-    # Merge figures
-    row_list = []
-    edge_dict = {}
-    final_shapes = np.array(list(final_shape_dict.values()))
-    for cont, cont_fig in contrast_dict.items():
-        if cont not in ['T1w', 'T2w', 'T2star', 'MP2RAGE']:
-            y_width = np.max(final_shapes[:, 1]) - cont_fig.shape[1]
-            cont_fig = np.pad(cont_fig, pad_width=((0,0), (y_width//2,y_width-y_width//2), (0,0)))
-            row_list.append(cont_fig)
-
-    # Concatenate rows
-    row_fig = np.concatenate(row_list, axis=0)
-
-    # Pad edge contrasts
-    for cont in ['T1w', 'T2w']:
-        # Concatenate MP2RAGE with T2w and T2star with T1w
-        im = contrast_dict[cont]
-        im2 = contrast_dict['T2star'] if cont=='T1w' else contrast_dict['MP2RAGE']
-        if im.shape[1] > im2.shape[1]:
-            y_width = im.shape[1] - im2.shape[1]
-            im2 = np.pad(im2, pad_width=((0,0), (y_width//2,y_width-y_width//2), (0,0)))
-        else:
-            y_width = im2.shape[1] - im.shape[1]
-            im = np.pad(im, pad_width=((0,0), (y_width//2,y_width-y_width//2), (0,0)))
-        edge_dict[cont]=np.concatenate((im2,im), axis=0)
-
-    # Identify max x
-    x_max = np.max([arr.shape[0] for arr in edge_dict.values()]+[row_fig.shape[0]])
-    if row_fig.shape[0] < x_max:
-        x_width = x_max - row_fig.shape[0]
-        row_fig = np.pad(row_fig, pad_width=((x_width//2,x_width-x_width//2), (0,0), (0,0)))
-    final_fig = row_fig
-
-    for cont,im in edge_dict.items():
-        if im.shape[0] < x_max:
-            x_width = x_max - im.shape[0]
-            im = np.pad(im, pad_width=((x_width//2,x_width-x_width//2), (0,0), (0,0)))
-        if cont == 'T1w':
-            final_fig = np.concatenate((im, final_fig), axis=1)
-        else:
-            final_fig = np.concatenate((final_fig, im), axis=1)
-
-    cv2.imwrite(os.path.join(jpeg_folder,f'sexy_{sub_string}.png'), final_fig)
+    # Save all figures in a final folder
+    sexy_folder = os.path.join(jpeg_folder,'out')
+    if not os.path.exists(sexy_folder):
+        os.makedirs(sexy_folder)
+    
+    for cont, im in contrast_dict.items():
+        cv2.imwrite(os.path.join(sexy_folder, f'{cont}.png'), im)
 
 if __name__=='__main__':
     main()
