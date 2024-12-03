@@ -9,7 +9,8 @@ from vrac.data_management.utils import fetch_subject_and_session, fetch_contrast
 def main():
     #path_json_config = '/home/GRAMES.POLYMTL.CA/p118739/data/config_data/sc-seg/sci-zurich-colorado_dcm-oklahoma.json'
     #path_json_config = '/home/GRAMES.POLYMTL.CA/p118739/data/config_data/canal-seg/dcm-oklahoma-brno_sci-paris.json'
-    path_json_config = '/home/GRAMES.POLYMTL.CA/p118739/data/config_data/vert-labeling/benchmark.json'
+    #path_json_config = '/home/GRAMES.POLYMTL.CA/p118739/data/config_data/vert-labeling/benchmark.json'
+    path_json_config = '/home/GRAMES.POLYMTL.CA/p118739/data/config_data/vert-labeling/sexy_data.json'
 
     # Load json data
     with open(path_json_config, 'r') as file:
@@ -18,6 +19,7 @@ def main():
     processed_files = []
 
     # Init out dict
+    total_nb = 0
     resolution=[]
     missing_tsv=[]
     tsv_dict = {
@@ -40,6 +42,7 @@ def main():
 
         # Check if subject already processed
         if filename not in processed_files:
+            total_nb+=1
             # Add subject
             processed_files.append(filename)
 
@@ -78,7 +81,10 @@ def main():
                     if key in tsv.keys():
                         info = tsv[key][participant_idx]
                     else:
-                        info = 'None'
+                        if key == 'age':
+                            info = np.nan
+                        else:
+                            info = 'None'
                     if key == 'age':
                         tsv_dict[key].append(info)
                     else:
@@ -122,6 +128,10 @@ def main():
     print()
     for info, num in file_dict['dataset'].items():
         print(f'{info} --> N = {num}')
+    print()
+    print('--- Total ---')
+    print()
+    print(f'N = {total_nb}')
     print()
 
 
