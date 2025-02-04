@@ -17,7 +17,7 @@ from vrac.data_management.utils import get_img_path_from_label_path
 
 def main():
     # Add variables
-    bids_folder = '/home/GRAMES.POLYMTL.CA/p118739/data/datasets/spinegeneric-refac/data-multi-subject'
+    bids_folder = '/home/GRAMES.POLYMTL.CA/p118739/data/datasets/data-multi-subject'
     
     for derivative in ["labels", "labels_softseg",  "labels_softseg_bin"]:
         derivatives_path = os.path.join(bids_folder, f'derivatives/{derivative}')
