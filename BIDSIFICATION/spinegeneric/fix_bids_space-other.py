@@ -28,6 +28,8 @@ def main():
         for label_path in space_other_files:
             img_path = get_img_path_from_label_path(label_path)
             if not os.path.exists(img_path):
+                img_path = get_img_path_from_label_path(label_path.replace('_space-other', ''))
+            if not os.path.exists(img_path):
                 print(f'File {img_path} is missing !')
                 missing_files.append(img_path)
             else:
@@ -72,6 +74,15 @@ def main():
                         
         print("missing files:\n" + '\n'.join(sorted(missing_files)))
         print("err files:\n" + '\n'.join(sorted(err)))
+
+        with open('err.txt', 'w') as f:
+            for line in err:
+                f.write(f"{line}\n")
+
+        with open('missing.txt', 'w') as f:
+            for line in missing_files:
+                f.write(f"{line}\n")
+
 
 
 if __name__=='__main__':
