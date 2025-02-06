@@ -7,38 +7,40 @@ import os
 
 from vrac.data_management.image import Image
 from vrac.data_management.utils import get_img_path_from_label_path
+import glob
 
 def main():
     # Add variables
-    bids_folder = '/Users/nathan/data/data-spinegeneric-fix'
+    bids_folder = '/home/GRAMES.POLYMTL.CA/p118739/data/datasets/data-multi-subject'
+
+    for derivative in ["labels", "labels_softseg",  "labels_softseg_bin"]:
+        derivatives_path = os.path.join(bids_folder, f'derivatives/{derivative}')
+        
+        err = []
+        json_files = glob.glob(derivatives_path + '/**/*' + '*.json', recursive=True)
     
-    with open(os.path.join(bids_folder, 'changed_json.txt')) as f:
-        changed_files = [os.path.join(bids_folder, file.replace('\n','')) for file in f.readlines()]
+        for path in json_files:
+            label_path = path.replace('.json', '.nii.gz')
+
+            img_path = get_img_path_from_label_path(label_path)
+
+            # Load image in RPI
+            img = Image(img_path).change_orientation('RPI')
+
+            # Load label in RPI
+            label = Image(label_path).change_orientation('RPI')
+
+            # Check if equal size
+            if img.dim[:3] != label.dim[:3]:
+                print(f"Size mismatch with label {label_path}")
+                err.append(label_path)
+            else:
+                # Edit json sidecars
+                edit_json_file(path, orig=True)
     
-    for path in changed_files:
-        if not os.path.exists(path):
-            raise ValueError(f'File {path} is missing !')
-        else:
-            if path.endswith('.json'):
-                label_path = path.replace('.json', '.nii.gz')
-
-                if 'dwi' in label_path:
-                    img_path = get_img_path_from_label_path(label_path.replace('_rec-average',''))
-                else:
-                    img_path = get_img_path_from_label_path(label_path)
-
-                # Load image in RPI
-                img = Image(img_path).change_orientation('RPI')
-
-                # Load label in RPI
-                label = Image(label_path).change_orientation('RPI')
-
-                # Check if equal size
-                if img.dim[:3] != label.dim[:3]:
-                    raise ValueError(f"Size mismatch with label {label_path}")
-                else:
-                    # Edit json sidecars
-                    edit_json_file(path, orig=True)
+    with open('err.txt', 'w') as f:
+        for line in err:
+            f.write(f"{line}\n")
 
 
 def edit_json_file(path_json_out, orig):
@@ -60,6 +62,13 @@ def edit_json_file(path_json_out, orig):
     }
 
     if "Author" in old_json or "author" in old_json:
+        if "label-SC_seg" in path_json_out:
+            data_json["GeneratedBy"].append(
+                {
+                    "Name": "sct_deepseg_sc",
+                    "Version": "SCT v6.2"
+                }
+            )
         data_json["GeneratedBy"].append(
             {
                 "Name": "Manual",
@@ -92,41 +101,9 @@ def edit_json_file(path_json_out, orig):
                 raise ValueError(f"Unknow json for file {path_json_out}")
         else:
             raise ValueError(f"{len(old_json["GeneratedBy"])} dict in GeneratedBy please act")
-        
 
-    if "SpatialReference" in old_json:
-        if "Other" in old_json["SpatialReference"]:
-            if "root-mean square" in old_json["SpatialReference"]["Other"]:
-                data_json["GeneratedBy"].append(
-                    {
-                        "Name": "sct_maths",
-                        "Flags": "-rms",
-                        "Axis": "t",
-                        "Version": "SCT v6~",
-                        "Date": "2024-02-20 00:00:00"
-                    },
-                )
-        if "Resampling" in old_json["SpatialReference"]:
-            data_json["GeneratedBy"].append(
-                {
-                    "Name": "sct_resample",
-                    "Flags": "-mm",
-                    "Resolution": old_json["SpatialReference"]["Resampling"],
-                    "Version": "SCT v6~",
-                    "Date": "2024-02-20 00:00:00"
-                },
-            )
-        if "Reorientation" in old_json["SpatialReference"]:
-            data_json["GeneratedBy"].append(
-                {
-                    "Name": "sct_image",
-                    "Flags": "-setorient",
-                    "Orientation": old_json["SpatialReference"]["Reorientation"],
-                    "Version": "SCT v6~",
-                    "Date": "2024-02-20 00:00:00"
-                }
-            )
-
+    print("old", old_json)
+    print("new", data_json)
     with open(path_json_out, 'w') as f:
         json.dump(data_json, f, indent=4)
         print(f'Modified: {path_json_out}')
