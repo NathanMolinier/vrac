@@ -14,11 +14,11 @@ def main():
     # Add variables
     bids_folder = '/home/GRAMES.POLYMTL.CA/p118739/data/datasets/data-multi-subject'
     
+    err = []
+    missing_files = []
     for derivative in ["labels", "labels_softseg",  "labels_softseg_bin"]:
         derivatives_path = os.path.join(bids_folder, f'derivatives/{derivative}')
         
-        err = []
-        missing_files = []
         space_other_files = glob.glob(derivatives_path + '/**/*' + 'space-other' + '*.nii.gz', recursive=True)
         for label_path in space_other_files:
             img_path = get_img_path_from_label_path(label_path)

@@ -13,10 +13,10 @@ def main():
     # Add variables
     bids_folder = '/home/GRAMES.POLYMTL.CA/p118739/data/datasets/data-multi-subject'
 
+    err = []
     for derivative in ["labels", "labels_softseg",  "labels_softseg_bin"]:
         derivatives_path = os.path.join(bids_folder, f'derivatives/{derivative}')
         
-        err = []
         json_files = glob.glob(derivatives_path + '/**/*' + '*.json', recursive=True)
     
         for path in json_files:
