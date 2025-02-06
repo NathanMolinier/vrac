@@ -3,16 +3,11 @@ This script removes unecessary use of space-other in the spinegeneric datasets.
 
 """
 
-import json
 import os
-import numpy as np
-import subprocess
 import shutil
-import time
-from copy import copy
 import glob
 
-from vrac.data_management.image import Image, zeros_like
+from vrac.data_management.image import Image
 from vrac.data_management.utils import get_img_path_from_label_path
 
 def main():
@@ -56,22 +51,31 @@ def main():
                     # Change image name
                     new_img_path = img_path.replace('_space-other','')
                         
-                    # Copy json sidecars
+                    # Rename label json sidecars
                     path_in_json = label_path.replace('.nii.gz', '.json')
                     path_out_json = new_label_path.replace('.nii.gz', '.json')
-                    shutil.copy(path_in_json, path_out_json)
+                    
+                    # Rename image json sidecars
+                    path_in_img_json = img_path.replace('.nii.gz', '.json')
+                    path_out_img_json = new_img_path.replace('.nii.gz', '.json')
 
-                    # Save files using RPI orientation
-                    img.save(new_img_path)
+                    # Save image and replace former files
+                    if new_img_path != img_path:
+                        img.save(new_img_path)
+                        shutil.copy(path_in_img_json, path_out_img_json)
+                        print(f'Removing image NIFTII {img_path}')
+                        os.remove(img_path)
+                        print(f'Removing image JSON {path_in_img_json}')
+                        os.remove(path_in_img_json)
+
+                    # Save label and replace former files
                     label.save(new_label_path)
-
-                    # Remove files
+                    shutil.copy(path_in_json, path_out_json)
                     print(f'Removing label NIFTII {label_path}')
                     os.remove(label_path)
-                    print(f'Removing image NIFTII {img_path}')
-                    os.remove(img_path)
-                    print(f'Removing JSON {path_in_json}')
+                    print(f'Removing label JSON {path_in_json}')
                     os.remove(path_in_json)
+                    
                         
         print("missing files:\n" + '\n'.join(sorted(missing_files)))
         print("err files:\n" + '\n'.join(sorted(err)))
