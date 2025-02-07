@@ -37,16 +37,16 @@ def main():
                     err.append(label_path)
                     print(f'ERROR with {label_path}')         
                         
-        print("missing files:\n" + '\n'.join(sorted(missing_files)))
-        print("err files:\n" + '\n'.join(sorted(err)))
+    print("missing files:\n" + '\n'.join(sorted(missing_files)))
+    print("err files:\n" + '\n'.join(sorted(err)))
 
-        with open('err.txt', 'w') as f:
-            for line in err:
-                f.write(f"{line}\n")
+    with open('err.txt', 'w') as f:
+        for line in err:
+            f.write(f"{line}\n")
 
-        with open('missing.txt', 'w') as f:
-            for line in missing_files:
-                f.write(f"{line}\n")
+    with open('missing.txt', 'w') as f:
+        for line in missing_files:
+            f.write(f"{line}\n")
 
 
 
