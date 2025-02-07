@@ -100,7 +100,7 @@ def edit_json_file(path_json_out, orig):
             else:
                 raise ValueError(f"Unknow json for file {path_json_out}")
         else:
-            raise ValueError(f"{len(old_json["GeneratedBy"])} dict in GeneratedBy please act")
+            raise ValueError(f"{len(old_json['GeneratedBy'])} dict in GeneratedBy please act")
 
     print("old", old_json)
     print("new", data_json)
