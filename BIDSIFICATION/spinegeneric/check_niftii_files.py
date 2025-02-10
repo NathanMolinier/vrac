@@ -27,15 +27,24 @@ def main():
                 missing_files.append(img_path)
             else:
                 # Load image in RPI
-                img = Image(img_path).change_orientation('RPI')
+                img = Image(img_path)
+
+                if img.orientation != 'RPI':
+                    img.change_orientation('RPI')
+                    img.save(img_path)
 
                 # Load label in RPI
-                label = Image(label_path).change_orientation('RPI')
+                label = Image(label_path)
+
+                if label.orientation != 'RPI':
+                    label.change_orientation('RPI')
+                    label.save(label_path)
 
                 # Check if equal size
                 if img.dim[:3] != label.dim[:3]:
                     err.append(label_path)
-                    print(f'ERROR with {label_path}')         
+                    print(f'ERROR with {label_path}')
+                        
                         
     print("missing files:\n" + '\n'.join(sorted(missing_files)))
     print("err files:\n" + '\n'.join(sorted(err)))
