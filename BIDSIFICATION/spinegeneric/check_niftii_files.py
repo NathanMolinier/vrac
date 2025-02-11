@@ -15,6 +15,7 @@ def main():
     bids_folder = '/home/GRAMES.POLYMTL.CA/p118739/data/datasets/data-multi-subject'
     
     err = []
+    ori = []
     missing_files = []
     for derivative in ["labels", "labels_softseg",  "labels_softseg_bin"]:
         derivatives_path = os.path.join(bids_folder, f'derivatives/{derivative}')
@@ -32,6 +33,8 @@ def main():
                 if img.orientation != 'RPI':
                     img.change_orientation('RPI')
                     img.save(img_path)
+                    ori.append(img_path)
+                    print(f'ORI with {img_path}')
 
                 # Load label in RPI
                 label = Image(label_path)
@@ -39,6 +42,8 @@ def main():
                 if label.orientation != 'RPI':
                     label.change_orientation('RPI')
                     label.save(label_path)
+                    ori.append(label_path)
+                    print(f'ORI with {label_path}')
 
                 # Check if equal size
                 if img.dim[:3] != label.dim[:3]:
@@ -55,6 +60,10 @@ def main():
 
     with open('missing.txt', 'w') as f:
         for line in missing_files:
+            f.write(f"{line}\n")
+    
+    with open('ori.txt', 'w') as f:
+        for line in ori:
             f.write(f"{line}\n")
 
 
