@@ -142,6 +142,34 @@ class HistogramEqualTransform(ImageOnlyTransform):
             img[c] = img[c]*orig_std + orig_mean
         return img
 
+
+class FunctionTransform(ImageOnlyTransform):
+    def __init__(self, function):
+        super().__init__()
+        self.function = function
+
+    def get_parameters(self, **data_dict) -> dict:
+        return {
+            'function': self.function
+        }
+    
+    def _apply_to_image(self, img: torch.Tensor, **params) -> torch.Tensor:
+        for c in range(img.shape[0]): 
+            # Compute original mean, std and min/max values
+            img_min, img_max = img[c].min(), img[c].max()
+
+            # Normalize
+            img[c] = (img[c] - torch.mean(img[c]))/torch.clamp(torch.std(img[c]), min=1e-7)
+            img[c] = (img[c] - img.min()) / (img.max() - img.min())
+
+            # Apply function
+            img[c] = params['function'](img[c])
+
+            # Return to original distribution
+            img = img * (img_max - img_min) + img_min
+        return img
+    
+
 ### Redistribute segmentation values
     
 
