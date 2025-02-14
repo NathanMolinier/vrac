@@ -88,23 +88,22 @@ class ConvTransform(ImageOnlyTransform):
         '''
         We expect (C, X, Y) or (C, X, Y, Z) shaped inputs for image and seg
         '''
-        for c in img.shape[0]:
-            orig_mean = torch.mean(img[c])
-            orig_std = torch.std(img[c])
-            img_ = img[c].unsqueeze(0)  # adds a batch dim
-            if params['kernel_type'] == 'Laplace':
-                tot_ = apply_filter(img_, params['kernel'])
-            elif params['kernel_type'] == 'Scharr':
-                tot_ = torch.zeros_like(img_)
-                for kernel in params['kernel']:
-                    if params['absolute']:
-                        tot_ += torch.abs(apply_filter(img_, kernel))
-                    else:
-                        tot_ += apply_filter(img_, kernel)
-            mean = torch.mean(tot_)
-            std = torch.std(tot_)
-            img[c] = (tot_ - mean)/torch.clamp(std, min=1e-7)
-            img[c] = img[c]*orig_std + orig_mean # return to original distribution
+        orig_mean = torch.mean(img)
+        orig_std = torch.std(img)
+        img_ = img.unsqueeze(0)  # adds a batch dim
+        if params['kernel_type'] == 'Laplace':
+            tot_ = apply_filter(img_, params['kernel'])
+        elif params['kernel_type'] == 'Scharr':
+            tot_ = torch.zeros_like(img_)
+            for kernel in params['kernel']:
+                if params['absolute']:
+                    tot_ += torch.abs(apply_filter(img_, kernel))
+                else:
+                    tot_ += apply_filter(img_, kernel)
+        mean = torch.mean(tot_)
+        std = torch.std(tot_)
+        img = (tot_ - mean)/torch.clamp(std, min=1e-7)
+        img = img*orig_std + orig_mean # return to original distribution
         return img
 
 
