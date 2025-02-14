@@ -108,36 +108,39 @@ class ConvTransform(ImageOnlyTransform):
         return img
 
 
-class LaplaceTransform(ImageOnlyTransform):
-    def __init__(self, absolute: bool = False):
+class HistogramEqualTransform(ImageOnlyTransform):
+    def __init__(self):
         super().__init__()
-        self.absolute = absolute
-
-    def get_parameters(self, **data_dict) -> dict:
-        return {
-            'absolute': self.absolute
-        }
     
     def _apply_to_image(self, img: torch.Tensor, **params) -> torch.Tensor:
-        if len(params['axes']) == 0:
-            return img
-        axes = [i + 1 for i in params['axes']]
-        return torch.flip(img, axes)
+        for c in range(img.shape[0]): 
+            orig_mean = torch.mean(img[c])
+            orig_std = torch.std(img[c])
+            img_min, img_max = img[c].min(), img[c].max()
 
-    def _apply_to_segmentation(self, segmentation: torch.Tensor, **params) -> torch.Tensor:
-        if len(params['axes']) == 0:
-            return segmentation
-        axes = [i + 1 for i in params['axes']]
-        return torch.flip(segmentation, axes)
+            # Flatten the image and compute the histogram
+            img_flattened = img[c].flatten().to(torch.float32)
+            hist, bins = torch.histogram(img_flattened, bins=256)
 
-    def _apply_to_regr_target(self, regression_target, **params):
-        return NotImplementedError
+            # Compute bin edges
+            bin_edges = torch.linspace(img_min, img_max, steps=257)  # 256 bins -> 257 edges
 
-    def _apply_to_bbox(self, bbox, **params):
-        raise NotImplementedError
+            # Compute the normalized cumulative distribution function (CDF)
+            cdf = hist.cumsum(dim=0)
+            cdf = (cdf - cdf.min()) / (cdf.max() - cdf.min())  # Normalize to [0,1]
+            cdf = cdf * (img_max - img_min) + img_min  # Scale back to image range
 
-    def _apply_to_keypoints(self, keypoints, **params):
-        raise NotImplementedError
+            # Perform histogram equalization
+            indices = torch.searchsorted(bin_edges[:-1], img_flattened)
+            img_eq = torch.index_select(cdf, dim=0, index=torch.clamp(indices, 0, 255))
+            img[c] = img_eq.reshape(img[c].shape)
+
+            # Return to original distribution
+            mean = torch.mean(img[c])
+            std = torch.std(img[c])
+            img[c] = (img[c] - mean)/torch.clamp(std, min=1e-7)
+            img[c] = img[c]*orig_std + orig_mean
+        return img
 
 ### Redistribute segmentation values
     
@@ -291,3 +294,4 @@ def apply_filter(x: torch.Tensor, kernel: torch.Tensor, **kwargs) -> torch.Tenso
         kwargs["stride"] = 1
     output = conv(x, kernel, groups=kernel.shape[0], bias=None, **kwargs)
     return output.view(batch, chns, *output.shape[2:])
+
