@@ -186,7 +186,7 @@ class RedistributeTransform(BasicTransform):
         }
     
     def apply(self, data_dict: dict, **params) -> dict:
-        if data_dict.get('image') is not None:
+        if data_dict.get('image') is not None and data_dict.get('segmentation') is not None:
             data_dict['image'], data_dict['segmentation'] = self._apply_to_image(data_dict['image'], data_dict['segmentation'], **params)
         return data_dict
 
