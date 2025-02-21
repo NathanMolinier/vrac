@@ -169,7 +169,55 @@ class FunctionTransform(ImageOnlyTransform):
             # Return to original distribution
             img = img * (img_max - img_min) + img_min
         return img
+### Image from segmentation augmentation
+
+class ImageFromSegTransform(BasicTransform):
+    def __init__(self, classes=None, leave_background=0.5):
+        super().__init__()
+        self.classes = classes
+        self.leave_background = leave_background
+
+    def get_parameters(self, **data_dict) -> dict:
+        return {
+            'classes': self.classes,
+            'leave_background': self.leave_background
+        }
     
+    def apply(self, data_dict: dict, **params) -> dict:
+        if data_dict.get('image') is not None and data_dict.get('segmentation') is not None:
+            data_dict['image'], data_dict['segmentation'] = self._apply_to_image(data_dict['image'], data_dict['segmentation'], **params)
+        return data_dict
+
+    def _apply_to_image(self, img: torch.Tensor, seg: torch.Tensor, **params) -> torch.Tensor: 
+        img, seg = aug_labels2image(img, seg, classes=params['classes'], in_seg=params['leave_background'])
+        return img, seg
+
+def aug_labels2image(img, seg, classes=None, leave_background=0.5):
+    device = img.device
+    _seg = seg
+    if classes:
+        _seg = combine_classes(seg, classes)
+    
+    subject = tio.RandomLabelsToImage(label_key="seg", image_key="image")(tio.Subject(
+        seg=tio.LabelMap(tensor=_seg)
+    ))
+    new_img = subject.image.data
+
+    if torch.rand(1, device=device) < leave_background:
+        img_min, img_max = img.min(), img.max()
+        img_mean, img_std = img.mean(), img.std()
+        _img = (img - img_min) / (img_max - img_min)
+
+        new_img_min, new_img_max = new_img.min(), new_img.max()
+        new_img = (new_img - new_img_min) / (new_img_max - new_img_min)
+        new_img[_seg == 0] = _img[_seg == 0]
+
+        # Return to original range
+        mean = torch.mean(new_img)
+        std = torch.std(new_img)
+        new_img = (new_img - mean)/torch.clamp(std, min=1e-7)
+        new_img = new_img*img_std + img_mean
+    return new_img, seg
 
 ### Redistribute segmentation values
     
