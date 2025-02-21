@@ -276,8 +276,103 @@ def combine_classes(seg, classes):
         _seg[torch.isin(seg, c)] = i + 1
     return _seg
 
-### Artifacts augmentation (Motion, Ghosting, Spike, Bias Field, Blur, Noise)
+### Artifacts augmentation (Motion, Ghosting, Spike, Bias Field, Blur, Noise, Swap)
 
+class ArtifactTransform(BasicTransform):
+    def __init__(self, motion=False, ghosting=False, spike=False, bias_field=False, blur=False, noise=False, swap=False):
+        super().__init__()
+        self.motion = motion
+        self.ghosting = ghosting
+        self.spike = spike
+        self.bias_field = bias_field
+        self.blur = blur
+        self.noise = noise
+        self.swap = swap
+
+    def get_parameters(self, **data_dict) -> dict:
+        return {
+            "motion" : self.motion,
+            "ghosting" : self.ghosting,
+            "spike" : self.spike,
+            "bias_field" : self.bias_field,
+            "blur" : self.blur,
+            "noise" : self.noise,
+            "swap" : self.swap
+        }
+    
+    def apply(self, data_dict: dict, **params) -> dict:
+        if data_dict.get('image') is not None and data_dict.get('segmentation') is not None:
+            data_dict['image'], data_dict['segmentation'] = self._apply_to_image(data_dict['image'], data_dict['segmentation'], **params)
+        return data_dict
+
+    def _apply_to_image(self, img: torch.Tensor, seg: torch.Tensor, **params) -> torch.Tensor:
+        if params['motion']:
+            img, seg = aug_motion(img, seg)
+        if params['ghosting']:
+            img, seg = aug_ghosting(img, seg)
+        if params['spike']:
+            img, seg = aug_spike(img, seg)
+        if params['bias_field']:
+            img, seg = aug_bias_field(img, seg)
+        if params['blur']:
+            img, seg = aug_blur(img, seg)
+        if params['noise']:
+            img, seg = aug_noise(img, seg)
+        if params['swap']:
+            img, seg = aug_swap(img, seg)
+        return img, seg
+
+def aug_motion(img, seg):
+    subject = tio.RandomMotion()(tio.Subject(
+        image=tio.ScalarImage(tensor=img),
+        seg=tio.LabelMap(tensor=seg)
+    ))
+    return subject.image.data, subject.seg.data
+
+def aug_ghosting(img, seg):
+    subject = tio.RandomGhosting()(tio.Subject(
+        image=tio.ScalarImage(tensor=img),
+        seg=tio.LabelMap(tensor=seg)
+    ))
+    return subject.image.data, subject.seg.data
+
+def aug_spike(img, seg):
+    subject = tio.RandomSpike(intensity=(1, 2))(tio.Subject(
+        image=tio.ScalarImage(tensor=img),
+        seg=tio.LabelMap(tensor=seg)
+    ))
+    return subject.image.data, subject.seg.data
+
+def aug_bias_field(img, seg):
+    subject = tio.RandomBiasField()(tio.Subject(
+        image=tio.ScalarImage(tensor=img),
+        seg=tio.LabelMap(tensor=seg)
+    ))
+    return subject.image.data, subject.seg.data
+
+def aug_blur(img, seg):
+    subject = tio.RandomBlur()(tio.Subject(
+        image=tio.ScalarImage(tensor=img),
+        seg=tio.LabelMap(tensor=seg)
+    ))
+    return subject.image.data, subject.seg.data
+
+def aug_noise(img, seg):
+    original_mean, original_std = img.mean(), img.std()
+    img = (img - original_mean) / original_std
+    subject = tio.RandomNoise()(tio.Subject(
+        image=tio.ScalarImage(tensor=img),
+        seg=tio.LabelMap(tensor=seg)
+    ))
+    img = img  * original_std + original_mean
+    return subject.image.data, subject.seg.data
+
+def aug_swap(img, seg):
+    subject = tio.RandomSwap()(tio.Subject(
+        image=tio.ScalarImage(tensor=img),
+        seg=tio.LabelMap(tensor=seg)
+    ))
+    return subject.image.data, subject.seg.data
 
 ### Spatial augmentation (Flip, BSpline, Affine, Elastic)
 
