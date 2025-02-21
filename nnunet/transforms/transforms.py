@@ -5,9 +5,7 @@ from batchgeneratorsv2.helpers.scalar_type import RandomScalar, sample_scalar
 from batchgeneratorsv2.transforms.base.basic_transform import ImageOnlyTransform, BasicTransform
 from typing import Tuple
 
-import numpy as np
 import torchio as tio
-import gryds
 import scipy.ndimage as ndi
 from scipy.stats import norm
 from functools import partial
@@ -169,6 +167,59 @@ class FunctionTransform(ImageOnlyTransform):
             # Return to original distribution
             img = img * (img_max - img_min) + img_min
         return img
+
+def apply_filter(x: torch.Tensor, kernel: torch.Tensor, **kwargs) -> torch.Tensor:
+    """
+    Copied from https://github.com/Project-MONAI/MONAI/blob/dev/monai/networks/layers/simplelayers.py
+
+    Filtering `x` with `kernel` independently for each batch and channel respectively.
+
+    Args:
+        x: the input image, must have shape (batch, channels, H[, W, D]).
+        kernel: `kernel` must at least have the spatial shape (H_k[, W_k, D_k]).
+            `kernel` shape must be broadcastable to the `batch` and `channels` dimensions of `x`.
+        kwargs: keyword arguments passed to `conv*d()` functions.
+
+    Returns:
+        The filtered `x`.
+
+    Examples:
+
+    .. code-block:: python
+
+        >>> import torch
+        >>> from monai.networks.layers import apply_filter
+        >>> img = torch.rand(2, 5, 10, 10)  # batch_size 2, channels 5, 10x10 2D images
+        >>> out = apply_filter(img, torch.rand(3, 3))   # spatial kernel
+        >>> out = apply_filter(img, torch.rand(5, 3, 3))  # channel-wise kernels
+        >>> out = apply_filter(img, torch.rand(2, 5, 3, 3))  # batch-, channel-wise kernels
+
+    """
+    if not isinstance(x, torch.Tensor):
+        raise TypeError(f"x must be a torch.Tensor but is {type(x).__name__}.")
+    batch, chns, *spatials = x.shape
+    n_spatial = len(spatials)
+    if n_spatial > 3:
+        raise NotImplementedError(f"Only spatial dimensions up to 3 are supported but got {n_spatial}.")
+    k_size = len(kernel.shape)
+    if k_size < n_spatial or k_size > n_spatial + 2:
+        raise ValueError(
+            f"kernel must have {n_spatial} ~ {n_spatial + 2} dimensions to match the input shape {x.shape}."
+        )
+    kernel = kernel.to(x)
+    # broadcast kernel size to (batch chns, spatial_kernel_size)
+    kernel = kernel.expand(batch, chns, *kernel.shape[(k_size - n_spatial) :])
+    kernel = kernel.reshape(-1, 1, *kernel.shape[2:])  # group=1
+    x = x.view(1, kernel.shape[0], *spatials)
+    conv = [F.conv1d, F.conv2d, F.conv3d][n_spatial - 1]
+    if "padding" not in kwargs:
+        kwargs["padding"] = "same"
+
+    if "stride" not in kwargs:
+        kwargs["stride"] = 1
+    output = conv(x, kernel, groups=kernel.shape[0], bias=None, **kwargs)
+    return output.view(batch, chns, *output.shape[2:])
+    
 ### Image from segmentation augmentation
 
 class ImageFromSegTransform(BasicTransform):
@@ -311,10 +362,6 @@ def aug_redistribute_seg(img, seg, classes=None, in_seg=0.2):
 
     # Return to original range
     img = img * (original_max - original_min) + original_min
-    # mean = torch.mean(img)
-    # std = torch.std(img)
-    # img = (img - mean)/torch.clamp(std, min=1e-7)
-    # img = img*original_std + original_mean
 
     return img, seg
 
@@ -484,58 +531,4 @@ def aug_anisotropy(img, seg, downsampling=7):
     ))
     return subject.image.data, subject.seg.data
 
-
-### Utils function
-
-def apply_filter(x: torch.Tensor, kernel: torch.Tensor, **kwargs) -> torch.Tensor:
-    """
-    Codpied from https://github.com/Project-MONAI/MONAI/blob/dev/monai/networks/layers/simplelayers.py
-
-    Filtering `x` with `kernel` independently for each batch and channel respectively.
-
-    Args:
-        x: the input image, must have shape (batch, channels, H[, W, D]).
-        kernel: `kernel` must at least have the spatial shape (H_k[, W_k, D_k]).
-            `kernel` shape must be broadcastable to the `batch` and `channels` dimensions of `x`.
-        kwargs: keyword arguments passed to `conv*d()` functions.
-
-    Returns:
-        The filtered `x`.
-
-    Examples:
-
-    .. code-block:: python
-
-        >>> import torch
-        >>> from monai.networks.layers import apply_filter
-        >>> img = torch.rand(2, 5, 10, 10)  # batch_size 2, channels 5, 10x10 2D images
-        >>> out = apply_filter(img, torch.rand(3, 3))   # spatial kernel
-        >>> out = apply_filter(img, torch.rand(5, 3, 3))  # channel-wise kernels
-        >>> out = apply_filter(img, torch.rand(2, 5, 3, 3))  # batch-, channel-wise kernels
-
-    """
-    if not isinstance(x, torch.Tensor):
-        raise TypeError(f"x must be a torch.Tensor but is {type(x).__name__}.")
-    batch, chns, *spatials = x.shape
-    n_spatial = len(spatials)
-    if n_spatial > 3:
-        raise NotImplementedError(f"Only spatial dimensions up to 3 are supported but got {n_spatial}.")
-    k_size = len(kernel.shape)
-    if k_size < n_spatial or k_size > n_spatial + 2:
-        raise ValueError(
-            f"kernel must have {n_spatial} ~ {n_spatial + 2} dimensions to match the input shape {x.shape}."
-        )
-    kernel = kernel.to(x)
-    # broadcast kernel size to (batch chns, spatial_kernel_size)
-    kernel = kernel.expand(batch, chns, *kernel.shape[(k_size - n_spatial) :])
-    kernel = kernel.reshape(-1, 1, *kernel.shape[2:])  # group=1
-    x = x.view(1, kernel.shape[0], *spatials)
-    conv = [F.conv1d, F.conv2d, F.conv3d][n_spatial - 1]
-    if "padding" not in kwargs:
-        kwargs["padding"] = "same"
-
-    if "stride" not in kwargs:
-        kwargs["stride"] = 1
-    output = conv(x, kernel, groups=kernel.shape[0], bias=None, **kwargs)
-    return output.view(batch, chns, *output.shape[2:])
 
