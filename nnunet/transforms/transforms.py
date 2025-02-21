@@ -376,6 +376,55 @@ def aug_swap(img, seg):
 
 ### Spatial augmentation (Flip, BSpline, Affine, Elastic)
 
+class SpatialCustomTransform(BasicTransform):
+    def __init__(self, flip=False, affine=False, elastic=False):
+        super().__init__()
+        self.flip = flip
+        self.affine = affine
+        self.elastic = elastic
+
+    def get_parameters(self, **data_dict) -> dict:
+        return {
+            "flip" : self.flip,
+            "affine" : self.affine,
+            "elastic" : self.elastic,
+        }
+    
+    def apply(self, data_dict: dict, **params) -> dict:
+        if data_dict.get('image') is not None and data_dict.get('segmentation') is not None:
+            data_dict['image'], data_dict['segmentation'] = self._apply_to_image(data_dict['image'], data_dict['segmentation'], **params)
+        return data_dict
+
+    def _apply_to_image(self, img: torch.Tensor, seg: torch.Tensor, **params) -> torch.Tensor:
+        if params['flip']:
+            img, seg = aug_flip(img, seg)
+        if params['affine']:
+            img, seg = aug_affine(img, seg)
+        if params['elastic']:
+            img, seg = aug_elastic(img, seg)
+        return img, seg
+
+def aug_flip(img, seg):
+    subject = tio.RandomFlip(axes=('LR',))(tio.Subject(
+        image=tio.ScalarImage(tensor=img),
+        seg=tio.LabelMap(tensor=seg)
+    ))
+    return subject.image.data, subject.seg.data
+
+def aug_affine(img, seg):
+    subject = tio.RandomAffine()(tio.Subject(
+        image=tio.ScalarImage(tensor=img),
+        seg=tio.LabelMap(tensor=seg)
+    ))
+    return subject.image.data, subject.seg.data
+
+def aug_elastic(img, seg):
+    subject = tio.RandomElasticDeformation(max_displacement=40)(tio.Subject(
+        image=tio.ScalarImage(tensor=img),
+        seg=tio.LabelMap(tensor=seg)
+    ))
+    return subject.image.data, subject.seg.data
+
 
 ### Anisotropy augmentation
 
