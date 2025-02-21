@@ -374,20 +374,22 @@ def aug_swap(img, seg):
     ))
     return subject.image.data, subject.seg.data
 
-### Spatial augmentation (Flip, BSpline, Affine, Elastic)
+### Spatial augmentation (Flip, Affine, Elastic, Anisotropy) --> removed BSpline
 
 class SpatialCustomTransform(BasicTransform):
-    def __init__(self, flip=False, affine=False, elastic=False):
+    def __init__(self, flip=False, affine=False, elastic=False, anisotropy=False):
         super().__init__()
         self.flip = flip
         self.affine = affine
         self.elastic = elastic
+        self.anisotropy = anisotropy
 
     def get_parameters(self, **data_dict) -> dict:
         return {
             "flip" : self.flip,
             "affine" : self.affine,
             "elastic" : self.elastic,
+            "anisotropy" : self.anisotropy,
         }
     
     def apply(self, data_dict: dict, **params) -> dict:
@@ -402,6 +404,8 @@ class SpatialCustomTransform(BasicTransform):
             img, seg = aug_affine(img, seg)
         if params['elastic']:
             img, seg = aug_elastic(img, seg)
+        if params['anisotropy']:
+            img, seg = aug_anisotropy(img, seg)
         return img, seg
 
 def aug_flip(img, seg):
