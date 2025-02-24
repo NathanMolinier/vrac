@@ -1,9 +1,7 @@
 import torch
 import torch.nn.functional as F
 
-from batchgeneratorsv2.helpers.scalar_type import RandomScalar, sample_scalar
 from batchgeneratorsv2.transforms.base.basic_transform import ImageOnlyTransform, BasicTransform
-from typing import Tuple
 
 import torchio as tio
 import scipy.ndimage as ndi
