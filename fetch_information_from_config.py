@@ -12,8 +12,8 @@ def main():
     #path_json_config = '/home/GRAMES.POLYMTL.CA/p118739/data/config_data/sc-seg/sci-zurich-colorado_dcm-oklahoma.json' # SC seg
     #path_json_config = '/home/GRAMES.POLYMTL.CA/p118739/data/config_data/canal-seg/dcm-oklahoma-brno_sci-paris.json' # canal seg
     #path_json_config = '/home/GRAMES.POLYMTL.CA/p118739/data/config_data/vert-labeling/benchmark.json' # labeling seg
-    path_json_config = '/home/GRAMES.POLYMTL.CA/p118739/data/datasets/article-totalspineseg/config/sexy_data.json' # Sexy
-    #path_json_config = '/home/GRAMES.POLYMTL.CA/p118739/data/datasets/article-totalspineseg/config/splits.json' # Train
+    #path_json_config = '/home/GRAMES.POLYMTL.CA/p118739/data/datasets/article-totalspineseg/config/sexy_data.json' # Sexy
+    path_json_config = '/home/GRAMES.POLYMTL.CA/p118739/data/datasets/article-totalspineseg/config/splits.json' # Train
 
     # Load json data
     with open(path_json_config, 'r') as file:
@@ -33,6 +33,11 @@ def main():
         'pathology':{},
         'sex':{}
     }
+    tsv_dict_subject = {
+        'pathology':{},
+        'sex':{},
+        'subject_occurence':{}
+    }
     file_dict = {
         'contrast':{},
         'acquisition':{},
@@ -46,7 +51,7 @@ def main():
         path_img = os.path.join(config['DATASETS_PATH'], dic['IMAGE'])
         dataset = dic['IMAGE'].split('/')[0]
 
-        if '' in dataset:
+        if 'data-multi' in dataset: #or 'data-single' in dataset:
             # Fetch information from filename
             subjectID, sessionID, filename, contrast, echoID, acquisition = fetch_subject_and_session(path_img)
             mri_contrast = fetch_contrast(path_img)
@@ -132,6 +137,20 @@ def main():
                                 tsv_dict[key][info]=1
                             else:
                                 tsv_dict[key][info]+=1
+                            
+                            # Info by subjects
+                            if subjectID not in tsv_dict_subject['subject_occurence'].keys():
+                                tsv_dict_subject['subject_occurence'][subjectID] = 1
+                                if info not in tsv_dict_subject[key].keys():
+                                    tsv_dict_subject[key][info]=1
+                                else:
+                                    tsv_dict_subject[key][info]+=1
+                            elif tsv_dict_subject['subject_occurence'][subjectID] < len(tsv_dict_subject.keys())-1:
+                                tsv_dict_subject['subject_occurence'][subjectID] += 1
+                                if info not in tsv_dict_subject[key].keys():
+                                    tsv_dict_subject[key][info]=1
+                                else:
+                                    tsv_dict_subject[key][info]+=1
                 else:
                     missing_tsv.append(subjectID)
 
@@ -164,6 +183,11 @@ def main():
     print('--- Pathologies ---')
     print()
     for pat, num in tsv_dict['pathology'].items():
+        print(f'{pat} --> N = {num}')
+    print()
+    print('--- Pathologies by patients ---')
+    print()
+    for pat, num in tsv_dict_subject['pathology'].items():
         print(f'{pat} --> N = {num}')
     print()
     print('--- Contrast X Pathologie ---')
@@ -204,6 +228,10 @@ def main():
     print('--- Total images ---')
     print()
     print(f'N = {total_nb}')
+    print()
+    print('--- Missing subjects ---')
+    print()
+    print(f'N = {missing_tsv}')
     print()
 
 
