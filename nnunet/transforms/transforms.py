@@ -14,13 +14,14 @@ class ConvTransform(ImageOnlyTransform):
     '''
     Based on https://github.com/spinalcordtoolbox/disc-labeling-playground/blob/main/src/ply/models/transform.py
     '''
-    def __init__(self, kernel_type: str = 'Laplace', absolute: bool = False):
+    def __init__(self, kernel_type: str = 'Laplace', absolute: bool = False, retain_stats: bool = False):
         super().__init__()
         if kernel_type not in  ["Laplace","Scharr"]:
             raise NotImplementedError('Currently only "Laplace" and "Scharr" are supported.')
         else:
             self.kernel_type = kernel_type
         self.absolute = absolute
+        self.retain_stats = retain_stats
 
     def get_parameters(self, **data_dict) -> dict:
         spatial_dims = len(data_dict['image'].shape) - 1
@@ -78,7 +79,8 @@ class ConvTransform(ImageOnlyTransform):
         return {
             'kernel_type': self.kernel_type,
             'kernel': kernel,
-            'absolute': self.absolute
+            'absolute': self.absolute,
+            'retain_stats': self.retain_stats
         }
     
     def _apply_to_image(self, img: torch.Tensor, **params) -> torch.Tensor:
@@ -86,8 +88,9 @@ class ConvTransform(ImageOnlyTransform):
         We expect (C, X, Y) or (C, X, Y, Z) shaped inputs for image and seg
         '''
         for c in range(img.shape[0]):
-            orig_mean = torch.mean(img[c])
-            orig_std = torch.std(img[c])
+            if params['retain_stats']:
+                orig_mean = torch.mean(img[c])
+                orig_std = torch.std(img[c])
             img_ = img[c].unsqueeze(0).unsqueeze(0)  # adds temp batch and channel dim
             if params['kernel_type'] == 'Laplace':
                 tot_ = apply_filter(img_, params['kernel'])
@@ -98,21 +101,30 @@ class ConvTransform(ImageOnlyTransform):
                         tot_ += torch.abs(apply_filter(img_, kernel))
                     else:
                         tot_ += apply_filter(img_, kernel)
-            mean = torch.mean(tot_[0,0])
-            std = torch.std(tot_[0,0])
-            img[c] = (tot_[0,0] - mean)/torch.clamp(std, min=1e-7)
-            img[c] = img[c]*orig_std + orig_mean # return to original distribution
+            img[c] = tot_[0,0]
+            if params['retain_stats']:
+                mean = torch.mean(img[c])
+                std = torch.std(img[c])
+                img[c] = (img[c] - mean)/torch.clamp(std, min=1e-7)
+                img[c] = img[c]*orig_std + orig_mean # return to original distribution
         return img
 
 
 class HistogramEqualTransform(ImageOnlyTransform):
-    def __init__(self):
+    def __init__(self, retain_stats: bool = False):
         super().__init__()
+        self.retain_stats = retain_stats
+    
+    def get_parameters(self, **data_dict) -> dict:
+        return {
+            'retain_stats': self.retain_stats
+        }
     
     def _apply_to_image(self, img: torch.Tensor, **params) -> torch.Tensor:
-        for c in range(img.shape[0]): 
-            orig_mean = torch.mean(img[c])
-            orig_std = torch.std(img[c])
+        for c in range(img.shape[0]):
+            if params['retain_stats']:
+                orig_mean = torch.mean(img[c])
+                orig_std = torch.std(img[c])
             img_min, img_max = img[c].min(), img[c].max()
 
             # Flatten the image and compute the histogram
@@ -131,39 +143,46 @@ class HistogramEqualTransform(ImageOnlyTransform):
             indices = torch.searchsorted(bin_edges[:-1], img_flattened)
             img_eq = torch.index_select(cdf, dim=0, index=torch.clamp(indices, 0, 255))
             img[c] = img_eq.reshape(img[c].shape)
-
-            # Return to original distribution
-            mean = torch.mean(img[c])
-            std = torch.std(img[c])
-            img[c] = (img[c] - mean)/torch.clamp(std, min=1e-7)
-            img[c] = img[c]*orig_std + orig_mean
+            
+            if params['retain_stats']:
+                # Return to original distribution
+                mean = torch.mean(img[c])
+                std = torch.std(img[c])
+                img[c] = (img[c] - mean)/torch.clamp(std, min=1e-7)
+                img[c] = img[c]*orig_std + orig_mean
         return img
 
 
 class FunctionTransform(ImageOnlyTransform):
-    def __init__(self, function):
+    def __init__(self, function, retain_stats : bool = False):
         super().__init__()
         self.function = function
+        self.retain_stats = retain_stats
 
     def get_parameters(self, **data_dict) -> dict:
         return {
-            'function': self.function
+            'function': self.function,
+            'retain_stats': self.retain_stats
         }
     
     def _apply_to_image(self, img: torch.Tensor, **params) -> torch.Tensor:
-        for c in range(img.shape[0]): 
-            # Compute original mean, std and min/max values
-            img_min, img_max = img[c].min(), img[c].max()
+        for c in range(img.shape[0]):
+            if params['retain_stats']:
+                orig_mean = torch.mean(img[c])
+                orig_std = torch.std(img[c])
 
             # Normalize
-            img[c] = (img[c] - torch.mean(img[c]))/torch.clamp(torch.std(img[c]), min=1e-7)
-            img[c] = (img[c] - img.min()) / (img.max() - img.min())
+            img[c] = (img[c] - img.min()) / (img.max() - img.min() + 0.00001)
 
             # Apply function
             img[c] = params['function'](img[c])
 
-            # Return to original distribution
-            img = img * (img_max - img_min) + img_min
+            if params['retain_stats']:
+                # Return to original distribution
+                mean = torch.mean(img[c])
+                std = torch.std(img[c])
+                img[c] = (img[c] - mean)/torch.clamp(std, min=1e-7)
+                img[c] = img[c]*orig_std + orig_mean
         return img
 
 def apply_filter(x: torch.Tensor, kernel: torch.Tensor, **kwargs) -> torch.Tensor:
@@ -221,15 +240,17 @@ def apply_filter(x: torch.Tensor, kernel: torch.Tensor, **kwargs) -> torch.Tenso
 ### Image from segmentation augmentation
 
 class ImageFromSegTransform(BasicTransform):
-    def __init__(self, classes=None, leave_background=0.5):
+    def __init__(self, classes=None, leave_background=0.5, retain_stats=False):
         super().__init__()
         self.classes = classes
         self.leave_background = leave_background
+        self.retain_stats = retain_stats
 
     def get_parameters(self, **data_dict) -> dict:
         return {
             'classes': self.classes,
-            'leave_background': self.leave_background
+            'leave_background': self.leave_background,
+            'retain_stats': self.retain_stats
         }
     
     def apply(self, data_dict: dict, **params) -> dict:
@@ -238,10 +259,10 @@ class ImageFromSegTransform(BasicTransform):
         return data_dict
 
     def _apply_to_image(self, img: torch.Tensor, seg: torch.Tensor, **params) -> torch.Tensor: 
-        img, seg = aug_labels2image(img, seg, classes=params['classes'], in_seg=params['leave_background'])
+        img, seg = aug_labels2image(img, seg, classes=params['classes'], leave_background=params['leave_background'], retain_stats=params['retain_stats'])
         return img, seg
 
-def aug_labels2image(img, seg, classes=None, leave_background=0.5):
+def aug_labels2image(img, seg, classes=None, leave_background=0.5, retain_stats=False):
     device = img.device
     _seg = seg
     if classes:
@@ -253,33 +274,38 @@ def aug_labels2image(img, seg, classes=None, leave_background=0.5):
     new_img = subject.image.data
 
     if torch.rand(1, device=device) < leave_background:
+        if retain_stats:
+            img_mean, img_std = img.mean(), img.std()
+
         img_min, img_max = img.min(), img.max()
-        img_mean, img_std = img.mean(), img.std()
         _img = (img - img_min) / (img_max - img_min)
 
         new_img_min, new_img_max = new_img.min(), new_img.max()
         new_img = (new_img - new_img_min) / (new_img_max - new_img_min)
         new_img[_seg == 0] = _img[_seg == 0]
 
-        # Return to original range
-        mean = torch.mean(new_img)
-        std = torch.std(new_img)
-        new_img = (new_img - mean)/torch.clamp(std, min=1e-7)
-        new_img = new_img*img_std + img_mean
+        if retain_stats:
+            # Return to original range
+            mean = torch.mean(new_img)
+            std = torch.std(new_img)
+            new_img = (new_img - mean)/torch.clamp(std, min=1e-7)
+            new_img = new_img*img_std + img_mean
     return new_img, seg
 
 ### Redistribute segmentation values
     
 class RedistributeTransform(BasicTransform):
-    def __init__(self, classes=None, in_seg=0.2):
+    def __init__(self, classes=None, in_seg=0.2, retain_stats=False):
         super().__init__()
         self.classes = classes
         self.in_seg = in_seg
+        self.retain_stats = retain_stats
 
     def get_parameters(self, **data_dict) -> dict:
         return {
             'classes': self.classes,
-            'in_seg': self.in_seg
+            'in_seg': self.in_seg,
+            'retain_stats': self.retain_stats
         }
     
     def apply(self, data_dict: dict, **params) -> dict:
@@ -289,10 +315,10 @@ class RedistributeTransform(BasicTransform):
 
     def _apply_to_image(self, img: torch.Tensor, seg: torch.Tensor, **params) -> torch.Tensor:
         for c in range(img.shape[0]): 
-            img[c], seg[c] = aug_redistribute_seg(img[c], seg[c], classes=params['classes'], in_seg=params['in_seg'])
+            img[c], seg[c] = aug_redistribute_seg(img[c], seg[c], classes=params['classes'], in_seg=params['in_seg'], retain_stats=params['retain_stats'])
         return img, seg
 
-def aug_redistribute_seg(img, seg, classes=None, in_seg=0.2):
+def aug_redistribute_seg(img, seg, classes=None, in_seg=0.2, retain_stats=False):
     """
     Augment the image by redistributing the values of the image within the
     regions defined by the segmentation.
@@ -303,13 +329,12 @@ def aug_redistribute_seg(img, seg, classes=None, in_seg=0.2):
 
     if classes:
         _seg = combine_classes(_seg, classes)
-
-    # Compute original mean, std and min/max values
-    original_mean, original_std = img.mean(), img.std()
-    original_min, original_max = img.min(), img.max()
+    
+    if retain_stats:
+        # Compute original mean, std and min/max values
+        original_mean, original_std = img.mean(), img.std()
 
     # Normalize image
-    img = (img - original_mean) / original_std
     img_min, img_max = img.min(), img.max()
     img = (img - img_min) / (img_max - img_min)
 
@@ -358,8 +383,12 @@ def aug_redistribute_seg(img, seg, classes=None, in_seg=0.2):
     to_add_min, to_add_max = to_add.min(), to_add.max()
     img += 2 * (to_add - to_add_min) / (to_add_max - to_add_min + 1e-6)
 
-    # Return to original range
-    img = img * (original_max - original_min) + original_min
+    if retain_stats:
+        # Return to original range
+        mean = torch.mean(img)
+        std = torch.std(img)
+        img = (img - mean)/torch.clamp(std, min=1e-7)
+        img = img*original_std + original_mean
 
     return img, seg
 
