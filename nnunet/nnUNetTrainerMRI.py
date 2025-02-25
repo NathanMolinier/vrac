@@ -79,13 +79,67 @@ if __name__=='__main__':
 
     # Load image
     img_path = '/home/GRAMES.POLYMTL.CA/p118739/data/nnUNet_raw/Dataset348_DiscsVertebrae/imagesTr/sub-WHOLEamuFR_T1w_0000.nii.gz'
-    img = Image(img_path).change_orientation('LPI')
-    img_tensor = torch.from_numpy(img.data).unsqueeze(0)
+    img = Image(img_path).change_orientation('RSP')
+    img_tensor = torch.from_numpy(img.data.copy()).unsqueeze(0).to(torch.float32)
 
     seg_path = '/home/GRAMES.POLYMTL.CA/p118739/data/nnUNet_raw/Dataset348_DiscsVertebrae/labelsTr/sub-WHOLEamuFR_T1w.nii.gz'
-    seg = Image(seg_path).change_orientation('LPI')
-    seg_tensor = torch.from_numpy(seg.data).unsqueeze(0)
+    seg = Image(seg_path).change_orientation('RSP')
+    seg_tensor = torch.from_numpy(seg.data.copy()).unsqueeze(0)
 
-    #tmp = mri_transforms(**{'image': img_tensor, 'segmentation': seg_tensor})
-    tmp = transforms(**{'image': img_tensor, 'segmentation': seg_tensor})
-    print()
+    import cv2
+
+    from transforms.transforms import ConvTransform, HistogramEqualTransform, FunctionTransform, ImageFromSegTransform, RedistributeTransform, ArtifactTransform, SpatialCustomTransform
+
+    retain_stats = True
+    tensor_dict = {'Image':{'image': img_tensor.detach().clone()}}
+    tensor_dict['Laplace'] = ConvTransform(kernel_type='Laplace', absolute=False, retain_stats=retain_stats)(**{'image': img_tensor.detach().clone(), 'segmentation': seg_tensor.detach().clone()})
+    tensor_dict['LaplaceAbs'] = ConvTransform(kernel_type='Laplace', absolute=True, retain_stats=retain_stats)(**{'image': img_tensor.detach().clone(), 'segmentation': seg_tensor.detach().clone()})
+    tensor_dict['Scharr'] = ConvTransform(kernel_type='Scharr', absolute=False, retain_stats=retain_stats)(**{'image': img_tensor.detach().clone(), 'segmentation': seg_tensor.detach().clone()})
+    tensor_dict['ScharrAbs'] = ConvTransform(kernel_type='Scharr', absolute=True, retain_stats=retain_stats)(**{'image': img_tensor.detach().clone(), 'segmentation': seg_tensor.detach().clone()})
+    
+    tensor_dict['HistEqual'] = HistogramEqualTransform(retain_stats=retain_stats)(**{'image': img_tensor.detach().clone(), 'segmentation': seg_tensor.detach().clone()})
+    
+    tensor_dict['Log'] = FunctionTransform(function=lambda x:torch.log(1 + x), retain_stats=retain_stats)(**{'image': img_tensor.detach().clone(), 'segmentation': seg_tensor.detach().clone()})
+    tensor_dict['Sqrt'] = FunctionTransform(function=torch.sqrt, retain_stats=retain_stats)(**{'image': img_tensor.detach().clone(), 'segmentation': seg_tensor.detach().clone()})
+    tensor_dict['Sin'] = FunctionTransform(function=torch.sin, retain_stats=retain_stats)(**{'image': img_tensor.detach().clone(), 'segmentation': seg_tensor.detach().clone()})
+    tensor_dict['Exp'] = FunctionTransform(function=torch.exp, retain_stats=retain_stats)(**{'image': img_tensor.detach().clone(), 'segmentation': seg_tensor.detach().clone()})
+    tensor_dict['Sig'] = FunctionTransform(function=lambda x:1/(1 + torch.exp(-x)), retain_stats=retain_stats)(**{'image': img_tensor.detach().clone(), 'segmentation': seg_tensor.detach().clone()})
+    
+    tensor_dict['ImgFromSeg'] = ImageFromSegTransform(retain_stats=retain_stats)(**{'image': img_tensor.detach().clone(), 'segmentation': seg_tensor.detach().clone()})
+    
+    tensor_dict['Redis'] = RedistributeTransform(retain_stats=retain_stats)(**{'image': img_tensor.detach().clone(), 'segmentation': seg_tensor.detach().clone()})
+    
+    tensor_dict['Motion'] = ArtifactTransform(motion=True)(**{'image': img_tensor.detach().clone(), 'segmentation': seg_tensor.detach().clone()})
+    tensor_dict['Ghosting'] = ArtifactTransform(ghosting=True)(**{'image': img_tensor.detach().clone(), 'segmentation': seg_tensor.detach().clone()})
+    tensor_dict['Spike'] = ArtifactTransform(spike=True)(**{'image': img_tensor.detach().clone(), 'segmentation': seg_tensor.detach().clone()})
+    tensor_dict['Bias_field'] = ArtifactTransform(bias_field=True)(**{'image': img_tensor.detach().clone(), 'segmentation': seg_tensor.detach().clone()})
+    tensor_dict['Blur'] = ArtifactTransform(blur=True)(**{'image': img_tensor.detach().clone(), 'segmentation': seg_tensor.detach().clone()})
+    tensor_dict['Noise'] = ArtifactTransform(noise=True)(**{'image': img_tensor.detach().clone(), 'segmentation': seg_tensor.detach().clone()})
+    tensor_dict['Swap'] = ArtifactTransform(swap=True)(**{'image': img_tensor.detach().clone(), 'segmentation': seg_tensor.detach().clone()})
+    
+    tensor_dict['Flip'] = SpatialCustomTransform(flip=True)(**{'image': img_tensor.detach().clone(), 'segmentation': seg_tensor.detach().clone()})
+    tensor_dict['Affine'] = SpatialCustomTransform(affine=True)(**{'image': img_tensor.detach().clone(), 'segmentation': seg_tensor.detach().clone()})
+    tensor_dict['Elastic'] = SpatialCustomTransform(elastic=True)(**{'image': img_tensor.detach().clone(), 'segmentation': seg_tensor.detach().clone()})
+    tensor_dict['Anisotropy'] = SpatialCustomTransform(anisotropy=True)(**{'image': img_tensor.detach().clone(), 'segmentation': seg_tensor.detach().clone()})
+
+    nb_img = len(tensor_dict.keys())
+    nb_col = 6
+    nb_line = 4
+    output = []
+    line = []
+    aug = [[]]
+    for idx, (augment, dic) in enumerate(tensor_dict.items()):
+        if len(line) < nb_col:
+            img = 255*normalize(tensor_dict[augment]['image'].detach().numpy()[0,85])
+            line.append(img)
+            aug[-1].append(augment)
+        else:
+            output.append(np.concatenate(line, axis=1))
+            img = 255*normalize(tensor_dict[augment]['image'].detach().numpy()[0,85])
+            line = [img]
+            aug.append([augment])
+    output.append(np.concatenate(line, axis=1))
+
+    out_img = np.concatenate(output, axis=0)
+    cv2.imwrite('transforms.png' if retain_stats else 'transforms_nostats.png', out_img)
+    print(aug)
