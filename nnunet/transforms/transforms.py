@@ -8,6 +8,8 @@ import scipy.ndimage as ndi
 from scipy.stats import norm
 from functools import partial
 
+import random
+
 ### Contrast transform (Laplace, Gamma, Histogram Equalization, Log, Sqrt, Exp, Sin, Sig, Inverse)
 
 class ConvTransform(ImageOnlyTransform):
@@ -401,7 +403,11 @@ def combine_classes(seg, classes):
 ### Artifacts augmentation (Motion, Ghosting, Spike, Bias Field, Blur, Noise, Swap)
 
 class ArtifactTransform(BasicTransform):
-    def __init__(self, motion=False, ghosting=False, spike=False, bias_field=False, blur=False, noise=False, swap=False):
+    def __init__(self, motion=False, ghosting=False, spike=False, bias_field=False, blur=False, noise=False, swap=False, random_pick=False):
+        '''
+        Apply all selected artifacts (motion, ghosting, spike, bias field, blur, noise, and swap) to the image if they are enabled (set to True).  
+        If `random_pick` is True, randomly select and apply ONE of the enabled artifacts.
+        '''
         super().__init__()
         self.motion = motion
         self.ghosting = ghosting
@@ -410,17 +416,27 @@ class ArtifactTransform(BasicTransform):
         self.blur = blur
         self.noise = noise
         self.swap = swap
+        self.random_pick = random_pick
 
     def get_parameters(self, **data_dict) -> dict:
-        return {
-            "motion" : self.motion,
-            "ghosting" : self.ghosting,
-            "spike" : self.spike,
-            "bias_field" : self.bias_field,
-            "blur" : self.blur,
-            "noise" : self.noise,
-            "swap" : self.swap
+
+        artifacts = {
+            "motion": self.motion,
+            "ghosting": self.ghosting,
+            "spike": self.spike,
+            "bias_field": self.bias_field,
+            "blur": self.blur,
+            "noise": self.noise,
+            "swap": self.swap
         }
+
+        enabled_artifacts = {k:v for k,v in artifacts.items() if v}
+
+        if self.random_pick and enabled_artifacts:
+            selected_artifact = random.choice(list(enabled_artifacts.keys()))
+            artifacts = {k: (k == selected_artifact) for k,v in artifacts.items()}
+
+        return artifacts
     
     def apply(self, data_dict: dict, **params) -> dict:
         if data_dict.get('image') is not None and data_dict.get('segmentation') is not None:
@@ -499,20 +515,33 @@ def aug_swap(img, seg):
 ### Spatial augmentation (Flip, Affine, Elastic, Anisotropy) --> removed BSpline
 
 class SpatialCustomTransform(BasicTransform):
-    def __init__(self, flip=False, affine=False, elastic=False, anisotropy=False):
+    def __init__(self, flip=False, affine=False, elastic=False, anisotropy=False, random_pick=False):
+        '''
+        Apply all selected spatial transformation (flip, affine, elastic and anisotropy) to the image if they are enabled (set to True).  
+        If `random_pick` is True, randomly select and apply ONE of the enabled transformation.
+        '''
         super().__init__()
         self.flip = flip
         self.affine = affine
         self.elastic = elastic
         self.anisotropy = anisotropy
+        self.random_pick = random_pick
 
     def get_parameters(self, **data_dict) -> dict:
-        return {
+        transfo = {
             "flip" : self.flip,
             "affine" : self.affine,
             "elastic" : self.elastic,
-            "anisotropy" : self.anisotropy,
+            "anisotropy" : self.anisotropy
         }
+
+        enabled_transfo = {k:v for k,v in transfo.items() if v}
+
+        if self.random_pick and enabled_transfo:
+            selected_transfo = random.choice(list(enabled_transfo.keys()))
+            transfo = {k: (k == selected_transfo) for k,v in transfo.items()}
+        
+        return transfo
     
     def apply(self, data_dict: dict, **params) -> dict:
         if data_dict.get('image') is not None and data_dict.get('segmentation') is not None:
