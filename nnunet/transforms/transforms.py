@@ -372,7 +372,7 @@ def aug_redistribute_seg(img, seg, classes=None, in_seg=0.2, retain_stats=False)
         else:
             l_mean_dilate, l_std_dilate = l_mean, l_std  # Fallback to original values
         
-        redist_std = max(torch.rand(1, device=device) * 0.2 + 0.4 * abs((l_mean - l_mean_dilate) * l_std / (l_std_dilate + 1e-6)), 0.01)
+        redist_std = max(torch.rand(1, device=device) * 0.2 + 0.4 * abs((l_mean - l_mean_dilate) * l_std / (l_std_dilate + 1e-6)), torch.tensor([0.01], device=device))
 
         redist = partial(norm.pdf, loc=l_mean.cpu().numpy(), scale=redist_std.cpu().numpy())
 
