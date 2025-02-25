@@ -10,7 +10,7 @@ from functools import partial
 
 import random
 
-### Contrast transform (Laplace, Gamma, Histogram Equalization, Log, Sqrt, Exp, Sin, Sig, Inverse)
+### Contrast transform (Laplace, Scharr, Histogram Equalization, Log, Sqrt, Exp, Sin, Sig) --> removed Gamma and Inverse
 
 class ConvTransform(ImageOnlyTransform):
     '''
