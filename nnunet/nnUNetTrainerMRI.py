@@ -58,45 +58,22 @@ class nnUNetTrainerMRI(nnUNetTrainer):
             ), apply_probability=0.15
         ))
         
-        # Function log
-        transforms.append(RandomTransform(
-            FunctionTransform(
-                function=lambda x:torch.log(1 + x), # Log
-                retain_stats=retain_stats
-            ), apply_probability=0.05
-        ))
+        # Apply functions
+        func_list = [
+            lambda x:torch.log(1 + x), # Log
+            torch.sqrt, # sqrt
+            torch.sin, # sin
+            torch.exp, # exp
+            lambda x:1/(1 + torch.exp(-x)), # sig
+        ]
 
-        # Function sqrt
-        transforms.append(RandomTransform(
-            FunctionTransform(
-                function=torch.sqrt, # sqrt
-                retain_stats=retain_stats
-            ), apply_probability=0.05
-        ))
-
-        # Function sin
-        transforms.append(RandomTransform(
-            FunctionTransform(
-                function=torch.sin, # sin
-                retain_stats=retain_stats
-            ), apply_probability=0.05
-        ))
-
-        # Function exp
-        transforms.append(RandomTransform(
-            FunctionTransform(
-                function=torch.exp, # exp
-                retain_stats=retain_stats
-            ), apply_probability=0.05
-        ))
-
-        # Function sig
-        transforms.append(RandomTransform(
-            FunctionTransform(
-                function=lambda x:1/(1 + torch.exp(-x)), # sig
-                retain_stats=retain_stats
-            ), apply_probability=0.05
-        ))
+        for func in func_list:
+            transforms.append(RandomTransform(
+                FunctionTransform(
+                    function=func,
+                    retain_stats=retain_stats
+                ), apply_probability=0.05
+            ))
 
         # Histogram equalization
         transforms.append(RandomTransform(
