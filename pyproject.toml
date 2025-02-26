@@ -5,9 +5,15 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "vrac"
 version = "20250226"
-dependencies = []
+dependencies = [
+    "nibabel",
+    "numpy",
+    "progress",
+    "loguru"
+]
 
 [project.scripts]
 vrac_fetch_data = "vrac.data_management.fetch_data_git_annex:main"
 vrac_init_config = "vrac.data_management.init_data_config:main"
 vrac_merge_configs = "vrac.data_management.merge_config:main"
+vrac_config_to_nnunet = "vrac.nnunet.convert_config_to_nnunet:main"
