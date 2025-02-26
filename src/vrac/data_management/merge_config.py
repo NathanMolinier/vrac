@@ -24,7 +24,7 @@ def main():
 
     # Load parameters
     json_paths = args.jsons
-    out_json_path = args.out
+    out_json_path = os.path.abspath(args.out)
 
     # Load first json
     with open(json_paths[0], "r") as file:
