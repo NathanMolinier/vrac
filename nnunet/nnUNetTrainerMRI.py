@@ -28,9 +28,6 @@ import torch
 
 from transforms.transforms import ConvTransform, HistogramEqualTransform, FunctionTransform, ImageFromSegTransform, RedistributeTransform, ArtifactTransform, SpatialCustomTransform
 
-from vrac.data_management.image import Image
-from vrac.utils.utils import normalize
-
 class nnUNetTrainerMRI(nnUNetTrainer):
     
     @staticmethod
@@ -265,6 +262,10 @@ class nnUNetTrainerMRI(nnUNetTrainer):
 
 
 if __name__=='__main__':
+    import cv2
+    from vrac.data_management.image import Image
+    from vrac.utils.utils import normalize
+    
     plans = load_json('/home/GRAMES.POLYMTL.CA/p118739/data/nnUNet_preprocessed/Dataset348_DiscsVertebrae/nnUNetPlans.json')
     configuration = '3d_fullres'
     fold = 0
@@ -303,8 +304,6 @@ if __name__=='__main__':
     tensor_dict = {}
     for i in range(24):
         tensor_dict[f'transfo_{str(i+1)}'] = transforms(**{'image': img_tensor.detach().clone(), 'segmentation': seg_tensor.detach().clone()})
-    
-    import cv2
     
     nb_img = len(tensor_dict.keys())
     nb_col = 6
