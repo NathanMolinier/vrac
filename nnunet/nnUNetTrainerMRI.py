@@ -265,7 +265,7 @@ if __name__=='__main__':
     import cv2
     from vrac.data_management.image import Image
     from vrac.utils.utils import normalize
-    
+
     plans = load_json('/home/GRAMES.POLYMTL.CA/p118739/data/nnUNet_preprocessed/Dataset348_DiscsVertebrae/nnUNetPlans.json')
     configuration = '3d_fullres'
     fold = 0
