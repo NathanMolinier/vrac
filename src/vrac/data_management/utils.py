@@ -178,6 +178,27 @@ def get_seg_path_from_img_path(img_path, seg_suffix='_seg', derivatives_path='/d
     seg_path = os.path.join('/'.join(path_list[:sub_folder_idx]), derivatives_path, path_list[sub_folder_idx:-1], seg_name)
     return seg_path
 
+def get_seg_path_from_label_path(label_path, seg_suffix='_seg'):
+    """
+    This function remove the label suffix to add the segmentation suffix
+    """
+    # Load path
+    path = Path(label_path)
+
+    # Extract file extension
+    ext = ''.join(path.suffixes)
+
+    # Find contrast index
+    path_list = path.name.replace(ext, '').split('_')
+    suffixes_pos = [1 if len(part.split('-')) == 1 else 0 for part in path_list]
+    contrast_idx = suffixes_pos.index(1) # Find suffix
+
+    # Get img name
+    seg_name = '_'.join(path_list[:contrast_idx+1]) + seg_suffix + ext
+    seg_path = path.parent / seg_name
+
+    return str(seg_path)
+
 ##
 def create_json(fname_nifti):
     """
