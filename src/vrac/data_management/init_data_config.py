@@ -12,11 +12,36 @@ import numpy as np
 from vrac.data_management.utils import get_img_path_from_label_path, get_cont_path_from_other_cont, fetch_contrast, get_seg_path_from_label_path
 
 
+def get_parser():
+    # parse command line arguments
+    parser = argparse.ArgumentParser(description='Create config JSON from a TXT file which contains list of paths')
+    
+    ## Parameters
+    parser.add_argument('--txt', required=True,
+                        help='Path to TXT file that contains only image or label paths. (Required)')
+    parser.add_argument('--type', choices=('LABEL', 'IMAGE', 'LABEL-SEG', 'CONTRAST-SC', 'CONTRAST'),
+                        help='Type of paths specified. Choices are "LABEL", "IMAGE", "LABEL-SEG", "CONTRAST-SC" or "CONTRAST". (Required)')
+    parser.add_argument('--cont', type=str, default='',
+                        help='If the type CONTRAST or CONTRAST-SC is selected, this variable specifies the wanted contrast for target.')
+    parser.add_argument('--suffix-seg', type=str, default='',
+                        help='If the type LABEL-SEG is selected, this variable specifies the suffix of the associated segmentation file. The segmentation must be stored insiade the same folder')
+    parser.add_argument('--split-validation', type=float, default=0.1,
+                        help='Split ratio for validation. Default=0.1')
+    parser.add_argument('--split-test', type=float, default=0.1,
+                        help='Split ratio for testing. Default=0.1')
+    return parser
+
 # Determine specified contrasts
-def init_data_config(args): 
+def main(): 
     """
     Create a JSON configuration file from a TXT file where images paths are specified
     """
+    parser = get_parser()
+    args = parser.parse_args()
+    
+    if args.split_test > 0.9:
+        args.split_validation = 1 - args.split_test
+
     if (args.split_validation + args.split_test) > 1:
         raise ValueError("The sum of the ratio between testing and validation cannot exceed 1")
 
@@ -143,25 +168,4 @@ def pairwise(iterable):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Create config JSON from a TXT file which contains list of paths')
-    
-    ## Parameters
-    parser.add_argument('--txt', required=True,
-                        help='Path to TXT file that contains only image or label paths. (Required)')
-    parser.add_argument('--type', choices=('LABEL', 'IMAGE', 'LABEL-SEG', 'CONTRAST-SC', 'CONTRAST'),
-                        help='Type of paths specified. Choices are "LABEL", "IMAGE", "LABEL-SEG", "CONTRAST-SC" or "CONTRAST". (Required)')
-    parser.add_argument('--cont', type=str, default='',
-                        help='If the type CONTRAST or CONTRAST-SC is selected, this variable specifies the wanted contrast for target.')
-    parser.add_argument('--suffix-seg', type=str, default='',
-                        help='If the type LABEL-SEG is selected, this variable specifies the suffix of the associated segmentation file. The segmentation must be stored insiade the same folder')
-    parser.add_argument('--split-validation', type=float, default=0.1,
-                        help='Split ratio for validation. Default=0.1')
-    parser.add_argument('--split-test', type=float, default=0.1,
-                        help='Split ratio for testing. Default=0.1')
-    
-    args = parser.parse_args()
-    
-    if args.split_test > 0.9:
-        args.split_validation = 1 - args.split_test
-    
-    init_data_config(args)
+    main()
