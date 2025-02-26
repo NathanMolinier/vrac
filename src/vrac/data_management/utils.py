@@ -13,11 +13,13 @@ import subprocess
 def get_img_path_from_label_path(str_path):
     """
     This function does 2 things: ⚠️ Files need to be stored in a BIDS compliant dataset
-        - Step 1: Remove label suffix and derivative entities after the contrast (e.g. "_label-discs_dlabel"). All the information between the MRI contrast and the file extension will be removed.
+        - Step 1: Remove label suffix (e.g. "_labels-disc-manual"). The suffix is always between the MRI contrast and the file extension.
         - Step 2: Remove derivatives path (e.g. derivatives/labels/). The first folders is always called derivatives but the second may vary (e.g. labels_soft)
 
     :param path: absolute path to the label img. Example: /<path_to_BIDS_data>/derivatives/labels/sub-amuALT/anat/sub-amuALT_T1w_labels-disc-manual.nii.gz
     :return: img path. Example: /<path_to_BIDS_data>/sub-amuALT/anat/sub-amuALT_T1w.nii.gz
+
+    Copied from https://github.com/spinalcordtoolbox/disc-labeling-benchmark
 
     """
     # Load path
@@ -26,12 +28,13 @@ def get_img_path_from_label_path(str_path):
     # Extract file extension
     ext = ''.join(path.suffixes)
 
-    # Get img name
-    path_list = path.name.split('_')
+    # Find contrast index
+    path_list = path.name.replace(ext, '').split('_')
     suffixes_pos = [1 if len(part.split('-')) == 1 else 0 for part in path_list]
-    contrast_idx = suffixes_pos.index(1) # Find the first suffix
+    contrast_idx = suffixes_pos.index(1) # Find suffix
 
-    img_name = '_'.join(path.name.split('_')[:contrast_idx+1]) + ext
+    # Get img name
+    img_name = '_'.join(path_list[:contrast_idx+1]) + ext
     
     # Create a list of the directories
     dir_list = str(path.parent).split('/')
@@ -147,24 +150,23 @@ def fetch_img_paths(config_data, split='TESTING'):
         raise ValueError('TYPE error: The TYPE can only be "IMAGE" or "LABEL"')
 
 ##
-def get_mask_path_from_img_path(img_path, suffix='_seg', derivatives_path='derivatives/labels'):
+def get_seg_path_from_img_path(img_path, seg_suffix='_seg', derivatives_path='/derivatives/labels'):
     """
-    This function returns the mask path from an image path. Images need to be stored in a BIDS compliant dataset.
+    This function returns the segmentaion path from an image path. Images need to be stored in a BIDS compliant dataset.
 
     :param img_path: String path to niftii image
-    :param suffix: Mask suffix
-    :param derivatives_path: Relative path to derivatives folder where labels are stored (e.i. 'derivatives/labels')
-    Based on https://github.com/spinalcordtoolbox/disc-labeling-benchmark
+    :param seg_suffix: Segmentation suffix
+    :param derivatives_path: Relative path to derivatives folder where labels are stored (e.i. '/derivatives/labels')
     """
     # Extract information from path
-    subjectID, sessionID, filename, contrast, echoID, acquisition = fetch_subject_and_session(img_path)
+    subjectID, sessionID, filename, contrast, echoID = fetch_subject_and_session(img_path)
 
     # Extract file extension
     path_obj = Path(img_path)
     ext = ''.join(path_obj.suffixes)
 
-    # Create mask name
-    mask_name = path_obj.name.split('.')[0] + suffix + ext
+    # Create segmentation name
+    seg_name = path_obj.name.split('.')[0] + seg_suffix + ext
 
     # Split path using "/" (TODO: check if it works for windows users)
     path_list = img_path.split('/')
@@ -172,9 +174,9 @@ def get_mask_path_from_img_path(img_path, suffix='_seg', derivatives_path='deriv
     # Extract subject folder index
     sub_folder_idx = path_list.index(subjectID)
 
-    # Reconstruct mask_path
-    mask_path = os.path.join('/'.join(path_list[:sub_folder_idx]), derivatives_path, "/".join(path_list[sub_folder_idx:-1]), mask_name)
-    return mask_path
+    # Reconstruct seg_path
+    seg_path = os.path.join('/'.join(path_list[:sub_folder_idx]), derivatives_path, path_list[sub_folder_idx:-1], seg_name)
+    return seg_path
 
 ##
 def create_json(fname_nifti):
