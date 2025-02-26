@@ -1,8 +1,12 @@
 [build-system]
-requires = ["setuptools"]
+requires = ["pip>=23", "setuptools>=67"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "vrac"
-version = "0.0.1"
+version = "20250226"
 dependencies = []
+
+[project.scripts]
+vrac_fetch_data = "vrac.data_management.fetch_data_git_annex:main"
+vrac_init_config = "vrac.data_management.init_data_config:main"
