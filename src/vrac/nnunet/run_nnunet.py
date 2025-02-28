@@ -8,7 +8,7 @@ from vrac.data_management.image import Image
 
 def get_parser():
     # parse command line arguments
-    parser = argparse.ArgumentParser(description='Convert cofig file to nnUNetV2 database format.')
+    parser = argparse.ArgumentParser(description='Run nnUNetV2 on folder or config json file.')
     parser.add_argument('--in-files', '-i', required=True, help='Path to the input directory or config json. ~/<your_path>/config_data.json (Required)')
     parser.add_argument('--out-folder', '-o', required=True, help='Path to output directory. Example: ~/data/dataset-nnunet (Required)')
     parser.add_argument('--dataset-number', '-dnum', required=True, type=int, help='Specify the task number.')
