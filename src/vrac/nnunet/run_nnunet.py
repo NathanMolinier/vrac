@@ -23,8 +23,8 @@ def main():
     args = parser.parse_args()
 
     # Load variables
-    input_data = args.in_files
-    output_folder = args.out_folder
+    input_data = os.path.abspath(args.in_files)
+    output_folder = os.path.abspath(args.out_folder)
     data_num = args.dataset_number
 
     # Get list of input files
@@ -42,7 +42,7 @@ def main():
     result_folder = glob.glob(os.path.join(results_path, f'Dataset{data_num}*/*'))
 
     # Fetch plan and trainer if not specified
-    if len(result_folder) > 1 and not args.nnunet_plans or not args.nnunet_trainer or not args.nnunet_config:
+    if len(result_folder) > 1 and (not args.nnunet_plans or not args.nnunet_trainer or not args.nnunet_config):
         raise ValueError(f'Multiple results folders detected please specify -p, -c and -tr')
     elif len(result_folder) == 1:
         folder_name = os.path.basename(result_folder[0])
