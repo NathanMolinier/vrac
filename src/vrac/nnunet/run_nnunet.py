@@ -66,12 +66,12 @@ def main():
 
     # Reorient and save input files
     for file in img_list:
-        Image(file).change_orientation('LPI').save(os.path.join(in_folder, os.path.basename(file)))
+        Image(file).change_orientation('LPI').save(os.path.join(in_folder, os.path.basename(file).replace('.nii.gz', '_0000.nii.gz')))
     
     # Call nnUNetV2 for inference
     subprocess.check_call([
         "nnUNetv2_predict",
-        "-d", data_num,
+        "-d", str(data_num),
         "-i", in_folder,
         "-o", pred_folder,
         "-f", "0",
