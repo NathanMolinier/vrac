@@ -57,8 +57,9 @@ def title2image(title, width, height):
 
 
 def main():
-    jpeg_folder = '/Users/nathan/Desktop/preview_sexy'
-    sub_string = 'step2_output_tags'
+    jpeg_folder = '/Users/nathan/Desktop/total_preview'
+    sub_string = '_step1'
+    sub_string_img = '_input'
 
     title_height = 60
 
@@ -69,16 +70,20 @@ def main():
     cont_dict = {}
     for file in jpeg_list:
         contrast = file.split('_sag')[0].split('_')[-1]
-        if contrast == 'MTS':
+        if contrast == 't1w':
+            contrast = 'T1w'
+        if contrast == 't2w':
+            contrast = 'T2w'
+        if contrast.startswith('mt-'):
             if 'mt-on' in file:
                 contrast = 'MT on'
             else:
                 contrast = 'MT off'
-        if contrast == 'UNIT1':
+        if contrast == 'unit1':
             contrast = 'MP2RAGE-UNI'
-        if contrast == 'T2star':
+        if contrast == 't2star':
             contrast = 'T2*w'
-        if 'ct' in file:
+        if '_ct_' in file:
             contrast = 'CT'
         if not contrast in cont_dict.keys():
             cont_dict[contrast] = [file]
@@ -94,7 +99,11 @@ def main():
         shape = []
         for jpeg_path in cont_dict[cont]:
             im = np.array(Image.open(jpeg_path))
-            raw = np.array(Image.open(jpeg_path.replace(sub_string, 'input')))
+            raw = np.array(Image.open(jpeg_path.replace(sub_string, sub_string_img)))
+            if im.shape[-1] == 4:
+                im = im[:2]
+            if raw.shape[-1] == 4:
+                raw = raw[:2]
             img_list.append(im)
             raw_list.append(raw)
             shape.append((im.shape[0], im.shape[1]*2, im.shape[2])) # Extract shapes
