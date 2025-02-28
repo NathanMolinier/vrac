@@ -29,7 +29,7 @@ def main():
 
     # Get list of input files
     if input_data.endswith('.json'):
-        with open(args.config, "r") as file:
+        with open(input_data, "r") as file:
             config = json.load(file)
         img_list = [os.path.join(config['DATASETS_PATH'], file['IMAGE']) for file in config['TESTING']]
     else:
