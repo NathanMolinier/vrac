@@ -57,14 +57,14 @@ def title2image(title, width, height):
 
 
 def main():
-    jpeg_folder = '/Users/nathan/Desktop/total_preview'
-    sub_string = '_step1'
+    jpeg_folder = '/Users/nathan/Desktop/preview'
+    sub_string = ''
     sub_string_img = '_input'
 
     title_height = 60
 
     # Fetch jpeg list
-    jpeg_list = glob.glob(os.path.join(jpeg_folder, f'*{sub_string}.jpg'))
+    jpeg_list = [file for file in glob.glob(os.path.join(jpeg_folder, f'*{sub_string}.jpg')) if not sub_string_img in file]
 
     # Regroup contrasts
     cont_dict = {}
@@ -99,7 +99,10 @@ def main():
         shape = []
         for jpeg_path in cont_dict[cont]:
             im = np.array(Image.open(jpeg_path))
-            raw = np.array(Image.open(jpeg_path.replace(sub_string, sub_string_img)))
+            if sub_string:
+                raw = np.array(Image.open(jpeg_path.replace(sub_string, sub_string_img)))
+            else:
+                raw = np.array(Image.open(jpeg_path.replace('.jpg', f'{sub_string_img}.jpg')))
             if im.shape[-1] == 4:
                 im = im[:2]
             if raw.shape[-1] == 4:
