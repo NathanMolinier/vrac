@@ -52,8 +52,8 @@ def update_json_file(path_in, path_out):
                 d["Version"] = json_info['info']['version']
             json_info.pop("info")
         if 'segmentation_quality' in json_info.keys():
-            if 'Author' in json_info['segmentation_quality'].keys():
-                d["Sofware"] = json_info['segmentation_quality']['vert_version']
+            if 'vert_version' in json_info['segmentation_quality'].keys():
+                d["Author"] = json_info['segmentation_quality']['vert_version']
             if 'vert_quality' in json_info['segmentation_quality'].keys():
                 d["Quality"] = json_info['segmentation_quality']['vert_quality']
         else:
