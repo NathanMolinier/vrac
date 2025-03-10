@@ -28,7 +28,7 @@ import torch
 
 from transforms.transforms import ConvTransform, HistogramEqualTransform, FunctionTransform, ImageFromSegTransform, RedistributeTransform, ArtifactTransform, SpatialCustomTransform
 
-class nnUNetTrainerMRI(nnUNetTrainer):
+class nnUNetTrainerDAExt(nnUNetTrainer):
     
     @staticmethod
     def get_training_transforms(
@@ -272,7 +272,7 @@ if __name__=='__main__':
     dataset_json = load_json('/home/GRAMES.POLYMTL.CA/p118739/data/nnUNet_preprocessed/Dataset348_DiscsVertebrae/dataset.json')
     device = torch.device('cpu')
     unpack_dataset = True
-    trainer = nnUNetTrainerMRI(plans, configuration, fold, dataset_json, unpack_dataset, device)
+    trainer = nnUNetTrainerDAExt(plans, configuration, fold, dataset_json, unpack_dataset, device)
     
     rotation_for_DA, do_dummy_2d_data_aug, initial_patch_size, mirror_axes = trainer.configure_rotation_dummyDA_mirroring_and_inital_patch_size()
     
