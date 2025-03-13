@@ -91,6 +91,11 @@ def main():
             bar.suffix  = f'{dict_list.index(d)+1}/{len(dict_list)}'
             bar.next()
         bar.finish()
+    
+    # Dump plot
+    with open('measure_vert.json','w') as f:
+        json.dump(plot_dict, f, indent=4)
+    
     # Plot boxplot
     save_boxplot(plot_dict.keys(), [plot_dict[vert]["R"] for vert in plot_dict.keys()], output_path='vert_sizeRL.png', x_axis='Vertebrae size along the Right-Left direction', y_axis='Size (mm)')
     save_boxplot(plot_dict.keys(), [plot_dict[vert]["S"] for vert in plot_dict.keys()], output_path='vert_sizeSI.png', x_axis='Vertebrae size along the Superior-Inferior direction', y_axis='Size (mm)')
