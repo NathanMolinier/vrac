@@ -39,7 +39,7 @@ VERT_DICT = {
 
 def main():
     # Path to config
-    config_path = '/home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/data/config_data/vert-seg/verse-spine-ct.json'
+    config_path = '/home/GRAMES.POLYMTL.CA/p118739/data/config_data/vert-seg/verse-spine-ct.json'
     
     # Read json file and create a dictionary
     with open(config_path, "r") as file:
