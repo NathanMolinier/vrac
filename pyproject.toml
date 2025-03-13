@@ -9,7 +9,10 @@ dependencies = [
     "nibabel",
     "numpy",
     "progress",
-    "loguru"
+    "loguru",
+    "opencv-python",
+    "seaborn",
+    "matplotlib",
 ]
 
 [project.scripts]
