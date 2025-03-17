@@ -34,7 +34,7 @@ VERT_DICT = {
     "L5":24,
     "L6":25,
     "sacrum":[26, 29, 30, 31, 32],
-    "cocygis":28
+    "cocygis":27
 }
 
 def main():
@@ -97,9 +97,9 @@ def main():
         json.dump(plot_dict, f, indent=4)
     
     # Plot boxplot
-    save_boxplot(plot_dict.keys(), [plot_dict[vert]["R"] for vert in plot_dict.keys()], output_path='vert_sizeRL.png', x_axis='Vertebrae size along the Right-Left direction', y_axis='Size (mm)')
-    save_boxplot(plot_dict.keys(), [plot_dict[vert]["S"] for vert in plot_dict.keys()], output_path='vert_sizeSI.png', x_axis='Vertebrae size along the Superior-Inferior direction', y_axis='Size (mm)')
-    save_boxplot(plot_dict.keys(), [plot_dict[vert]["P"] for vert in plot_dict.keys()], output_path='vert_sizePA.png', x_axis='Vertebrae size along the Posterior-Anterior direction', y_axis='Size (mm)')
+    save_boxplot(VERT_DICT.keys(), [plot_dict[vert]["R"] for vert in VERT_DICT.keys()], output_path='vert_sizeRL.png', x_axis='Vertebrae size along the Right-Left direction', y_axis='Size (mm)')
+    save_boxplot(VERT_DICT.keys(), [plot_dict[vert]["S"] for vert in VERT_DICT.keys()], output_path='vert_sizeSI.png', x_axis='Vertebrae size along the Superior-Inferior direction', y_axis='Size (mm)')
+    save_boxplot(VERT_DICT.keys(), [plot_dict[vert]["P"] for vert in VERT_DICT.keys()], output_path='vert_sizePA.png', x_axis='Vertebrae size along the Posterior-Anterior direction', y_axis='Size (mm)')
     print()
 
                 
