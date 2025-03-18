@@ -23,7 +23,7 @@ def main():
     config_raw_path = args.config
     config_1mm_name = 'verse-spine-ct-1mm.json'
 
-    out_dataset = args.out_folder
+    out_dataset = os.path.abspath(args.out_folder)
 
     # Load json config
     with open(config_raw_path, "r") as file:
@@ -49,11 +49,11 @@ def main():
             label = Image(label_path)
 
             # Reorient data to RSP
-            img.change_orientation('RSP')
-            label.change_orientation('RSP')
+            img.change_orientation('RSP').change_type('minimize')
+            label.change_orientation('RSP').change_type('int8')
 
             # Resample data to 1mm3
-            img_r = resample_nib(img, new_size=[1, 1, 1], new_size_type='mm', interpolation='linear')
+            img_r = resample_nib(img, new_size=[1, 1, 1], new_size_type='mm', interpolation='nn')
             label_r = resample_nib(label, image_dest=img_r, interpolation='nn')
 
             # Create output folders
@@ -64,8 +64,8 @@ def main():
                 os.makedirs(os.path.dirname(out_label_path))
 
             # Save data
-            img_r.change_type('float32').save(out_img_path)
-            label_r.change_type('int8').save(out_label_path)
+            img_r.save(out_img_path)
+            label_r.save(out_label_path)
 
             # Add data to config
             config_1mm[split].append(
