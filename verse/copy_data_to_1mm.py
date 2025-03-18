@@ -49,12 +49,16 @@ def main():
                 img = Image(img_path)
                 label = Image(label_path)
 
-                # Reorient data to RSP
-                img.change_orientation('RSP').change_type('minimize')
-                label.change_orientation('RSP').change_type('int8')
+                if (img.data % 1).any():
+                    # At least one value in img.data is a float
+                    raise ValueError(f'At least one value in img.data is a float in {img_path}')
 
+                # Reorient data to RSP
+                img.change_orientation('RSP')
+                label.change_orientation('RSP')
+                
                 # Resample data to 1mm3
-                img_r = resample_nib(img, new_size=[1, 1, 1], new_size_type='mm', interpolation='nn')
+                img_r = resample_nib(img, new_size=[1, 1, 1], new_size_type='mm', interpolation='linear')
                 label_r = resample_nib(label, image_dest=img_r, interpolation='nn')
 
                 # Create output folders
@@ -63,10 +67,14 @@ def main():
 
                 if not os.path.exists(os.path.dirname(out_label_path)):
                     os.makedirs(os.path.dirname(out_label_path))
+                
+                # round image
+                img_r.data = img_r.data.round().astype(np.int16)
+                img_r.hdr.set_data_dtype(np.int16)
 
                 # Save data
                 img_r.save(out_img_path)
-                label_r.save(out_label_path)
+                label_r.change_type('int8').save(out_label_path)
 
             # Add data to config
             config_1mm[split].append(
