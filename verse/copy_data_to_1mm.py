@@ -44,28 +44,29 @@ def main():
             out_img_path = os.path.join(out_dataset, 'image', os.path.basename(dic['IMAGE']))
             out_label_path = os.path.join(out_dataset, 'label', os.path.basename(dic['LABEL']))
 
-            # Load data
-            img = Image(img_path)
-            label = Image(label_path)
+            if not os.path.exists(out_img_path) and not os.path.exists(out_label_path):
+                # Load data
+                img = Image(img_path)
+                label = Image(label_path)
 
-            # Reorient data to RSP
-            img.change_orientation('RSP').change_type('minimize')
-            label.change_orientation('RSP').change_type('int8')
+                # Reorient data to RSP
+                img.change_orientation('RSP').change_type('minimize')
+                label.change_orientation('RSP').change_type('int8')
 
-            # Resample data to 1mm3
-            img_r = resample_nib(img, new_size=[1, 1, 1], new_size_type='mm', interpolation='nn')
-            label_r = resample_nib(label, image_dest=img_r, interpolation='nn')
+                # Resample data to 1mm3
+                img_r = resample_nib(img, new_size=[1, 1, 1], new_size_type='mm', interpolation='nn')
+                label_r = resample_nib(label, image_dest=img_r, interpolation='nn')
 
-            # Create output folders
-            if not os.path.exists(os.path.dirname(out_img_path)):
-                os.makedirs(os.path.dirname(out_img_path))
+                # Create output folders
+                if not os.path.exists(os.path.dirname(out_img_path)):
+                    os.makedirs(os.path.dirname(out_img_path))
 
-            if not os.path.exists(os.path.dirname(out_label_path)):
-                os.makedirs(os.path.dirname(out_label_path))
+                if not os.path.exists(os.path.dirname(out_label_path)):
+                    os.makedirs(os.path.dirname(out_label_path))
 
-            # Save data
-            img_r.save(out_img_path)
-            label_r.save(out_label_path)
+                # Save data
+                img_r.save(out_img_path)
+                label_r.save(out_label_path)
 
             # Add data to config
             config_1mm[split].append(
