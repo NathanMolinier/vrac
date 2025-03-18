@@ -49,14 +49,16 @@ def main():
                 img = Image(img_path)
                 label = Image(label_path)
 
-                if (img.data % 1).any():
-                    # At least one value in img.data is a float
-                    raise ValueError(f'At least one value in img.data is a float in {img_path}')
-
                 # Reorient data to RSP
                 img.change_orientation('RSP')
                 label.change_orientation('RSP')
-                
+
+                isInteger = True
+                if (img.data % 1).any():
+                    # At least one value in img.data is a float
+                    print(f'At least one value in img.data is a float in {img_path}')
+                    isInteger = False
+
                 # Resample data to 1mm3
                 img_r = resample_nib(img, new_size=[1, 1, 1], new_size_type='mm', interpolation='linear')
                 label_r = resample_nib(label, image_dest=img_r, interpolation='nn')
@@ -69,8 +71,12 @@ def main():
                     os.makedirs(os.path.dirname(out_label_path))
                 
                 # round image
-                img_r.data = img_r.data.round().astype(np.int16)
-                img_r.hdr.set_data_dtype(np.int16)
+                if isInteger:
+                    img_r.data = img_r.data.round().astype(np.int16)
+                    img_r.hdr.set_data_dtype(np.int16)
+                else:
+                    img_r.data = img_r.data.astype(np.float32)
+                    img_r.hdr.set_data_dtype(np.float32)
 
                 # Save data
                 img_r.save(out_img_path)
