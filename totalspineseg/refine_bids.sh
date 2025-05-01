@@ -1,0 +1,68 @@
+#!/bin/bash
+
+# Uncomment for full verbose
+# set -x
+
+# Immediately exit if error
+set -e -o pipefail
+
+# Exit if user presses CTRL+C (Linux) or CMD+C (OSX)
+trap "echo Caught Keyboard Interrupt within script. Exiting now.; exit" INT
+
+# GET PARAMS
+# ======================================================================================================================
+# SET DEFAULT VALUES FOR PARAMETERS.
+# ----------------------------------------------------------------------------------------------------------------------
+BIDS_FOLDER="/home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/data/datasets/whole-spine"
+IMG_FOLDER="derivatives/img"
+PRED_FOLDER="derivatives/pred"
+LABEL_FOLDER="derivatives/labels_nnInteractive"
+
+# ======================================================================================================================
+# SCRIPT STARTS HERE
+# ======================================================================================================================
+
+cd "$BIDS_FOLDER"
+
+# Create folders
+mkdir -p "$IMG_FOLDER"
+mkdir -p "$PRED_FOLDER"
+mkdir -p "$LABEL_FOLDER"
+
+# Copy images in same folder
+cp $(find sub* -type f -name '*.nii.gz' | grep -v .git) "$IMG_FOLDER"
+
+# Run totalspineseg on BIDS dataset
+conda activate tss_env
+echo Running TotalSpineSeg
+echo 
+totalspineseg "$IMG_FOLDER" "$PRED_FOLDER" -k step2_output
+conda deactivate
+
+# Run nnInteractive using the predictions
+conda activate nnInteractive
+for file in $(ls "$IMG_FOLDER");do
+    sub=$(echo "$file" | cut -d _ -f 1)
+    file_noext=$(echo "$file" | cut -d . -f 1)
+    # Create directory
+    mkdir -p "$LABEL_FOLDER"/"$sub"/anat
+
+    # Run nnInteractive
+    python ~/data_nvme_p118739/code/vrac/totalspineseg/nnInteractive_refine.py -i "$IMG_FOLDER"/"$file" -s "$PRED_FOLDER"/step2_output/"$file" -o "$LABEL_FOLDER"/"$sub"/anat
+
+    # Create JSON sidecars
+    CANAL_NEW="$LABEL_FOLDER"/"$sub"/anat/"$file_noext"_label-canal_seg.json
+    python ~/data_nvme_p118739/code/vrac/totalspineseg/create_jsonsidecars.py -path-json "$CANAL_NEW"
+
+    SPINE_NEW="$LABEL_FOLDER"/"$sub"/anat/"$file_noext"_label-spine_dseg.json
+    python ~/data_nvme_p118739/code/vrac/totalspineseg/create_jsonsidecars.py -path-json "$SPINE_NEW"
+
+    # Replace canal if Abel already corrected
+    CANAL_OLD=derivatives/labels/"$sub"/anat/"$file_noext"_label-canal_seg
+    if $(cat "$CANAL_OLD".json | grep -q "Abel Salmona"); 
+    then 
+        cp "$CANAL_OLD"* "$LABEL_FOLDER"/"$sub"/anat;
+    fi
+done
+conda deactivate
+    
