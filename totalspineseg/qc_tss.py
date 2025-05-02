@@ -61,7 +61,7 @@ def main():
     ) as imgs_to_generate:
         sct_deepseg_spinal_rootlets_t2w(
                 imgs_to_generate, img_path, seg_path, None, 'human',
-                radius=(80, 50))
+                radius=(500, 150))
         
 
 
@@ -84,34 +84,33 @@ def sct_deepseg_spinal_rootlets_t2w(
     #        use the old qc.py method "_make_QC_image_for_3d_volumes" for generating the background img.
 
     # Load the input images
-    img_input = Image(fname_input).change_orientation('SAL')
-    img_seg_sc = Image(fname_seg_sc).change_orientation('SAL')
-    img_seg_lesion = Image(fname_seg_lesion).change_orientation('SAL') if fname_seg_lesion else None
-
-    # - Normally, we would apply isotropic resampling to the image to a specific mm resolution (based on the species).
-    p_resample = {'human': 0.6, 'mouse': 0.1}[species]
+    img_input = Image(fname_input).change_orientation('LSA')
+    img_seg_sc = Image(fname_seg_sc).change_orientation('LSA')
+    img_seg_lesion = Image(fname_seg_lesion).change_orientation('LSA') if fname_seg_lesion else None
 
     # Resample images
-    S_I_resolution = img_input.dim[4]*3
-    logger.info('Resample images to %fx%fx%f vox', S_I_resolution, p_resample, p_resample)
+    S_I_resolution = 1
+    R_L_resolution = 5
+    A_P_resolution = 1
+    logger.info('Resample images to %fx%fx%f vox', R_L_resolution, S_I_resolution, A_P_resolution)
     img_input = resample_nib(
         image=img_input,
-        new_size=[S_I_resolution, p_resample, p_resample],
+        new_size=[R_L_resolution, S_I_resolution, A_P_resolution],
         new_size_type='mm',
         interpolation='spline',
     )
 
-    logger.info('Resample images to %fx%fx%f vox', S_I_resolution, p_resample, p_resample)
+    logger.info('Resample images to %fx%fx%f vox', R_L_resolution, S_I_resolution, A_P_resolution)
     img_seg_sc = resample_nib(
         image=img_seg_sc,
-        new_size=[S_I_resolution, p_resample, p_resample],
+        new_size=[R_L_resolution, S_I_resolution, A_P_resolution],
         new_size_type='mm',
         interpolation='nn',
     )
 
     img_seg_lesion = resample_nib(
         image=img_seg_lesion,
-        new_size=[S_I_resolution, p_resample, p_resample],
+        new_size=[R_L_resolution, S_I_resolution, A_P_resolution],
         new_size_type='mm',
         interpolation='nn',
     ) if fname_seg_lesion else None
@@ -120,8 +119,7 @@ def sct_deepseg_spinal_rootlets_t2w(
     # - However, we cannot apply resampling here because rootlets labels are often small (~1vox wide), and so resampling might
     #   corrupt the labels and cause them to be displayed unfaithfully.
     # - So, instead of resampling the image to fit the default crop radius, we scale the crop radius to suit the original resolution.
-    p_original = (img_seg_sc.dim[5], img_seg_sc.dim[6])  # Image may be anisotropic, so use both resolutions (H,W)
-    p_ratio = tuple(p_resample / p for p in p_original)
+    p_ratio = tuple([1, 1])
     radius = tuple(int(r * p) for r, p in zip(radius, p_ratio))
     # - One problem with this, however, is that if the crop radius ends up being smaller than the default, the QC will in turn be smaller as well.
     #   So, to ensure that the QC is still readable, we scale up by an integer factor whenever the p_ratio is < 1
@@ -130,50 +128,29 @@ def sct_deepseg_spinal_rootlets_t2w(
     #   So, we use `aspect` to adjust the image via imshow, and `radius` to know where to place the text in x/y coords
     aspect = p_ratio[1] / p_ratio[0]
 
-    # Each slice is centered on the segmentation
-    logger.info('Find the center of each slice')
-    centerline_param = ParamCenterline(algo_fitting="optic", contrast="t2")
-    img_centerline, _, _, _ = get_centerline(img_input, param=centerline_param)
-    centers = np.array([center_of_mass(slice) for slice in img_centerline.data])
-    inf_nan_fill(centers[:, 0])
-    inf_nan_fill(centers[:, 1])
-
-    # Generate the first QC report image
-    img = equalize_histogram(mosaic(img_input, centers, radius, scale))
-
-    # For QC reports, axial mosaics will often have smaller height than width
-    # (e.g. WxH = 20x3 slice images). So, we want to reduce the fig height to match this.
-    # `size_fig` is in inches. So, dpi=300 --> 1500px, dpi=100 --> 500px, etc.
-    size_fig = [5, 5 * (img.shape[0] / img.shape[1]) * aspect]
-
-    fig = mpl_figure.Figure()
-    fig.set_size_inches(*size_fig, forward=True)
-    mpl_backend_agg.FigureCanvasAgg(fig)
-    ax = fig.add_axes((0, 0, 1, 1))
-    ax.imshow(img, cmap='gray', interpolation='none', aspect=aspect)
-    add_orientation_labels(ax, radius=tuple(r*scale for r in radius))
-    ax.get_xaxis().set_visible(False)
-    ax.get_yaxis().set_visible(False)
-    img_path = str(imgs_to_generate['path_background_img'])
-    logger.debug('Save image %s', img_path)
-    fig.savefig(img_path, format='png', transparent=True, dpi=300)
-
-    # Generate the second QC report image
-    fig = mpl_figure.Figure()
-    fig.set_size_inches(*size_fig, forward=True)
-    mpl_backend_agg.FigureCanvasAgg(fig)
-    ax = fig.add_axes((0, 0, 1, 1))
     # get available labels
-    img = np.rint(np.ma.masked_where(img_seg_sc.data < 1, img_seg_sc.data))
-    labels = np.unique(img[np.where(~img.mask)]).astype(int)
+    seg = np.rint(np.ma.masked_where(img_seg_sc.data < 1, img_seg_sc.data))
+    labels = np.unique(seg[np.where(~seg.mask)]).astype(int)
     colormaps = [mpl_colors.ListedColormap(assign_label_colors_by_groups(labels))]
     for i, image in enumerate([img_seg_sc, img_seg_lesion]):
         if not image:
             continue
-        img = mosaic(image, centers, radius, scale)
-        img = np.ma.masked_less_equal(img, 0)
-        img.set_fill_value(0)
-        ax.imshow(img,
+        img, seg = mosaic(img_input, seg, radius, scale)
+        # Generate the first QC report image
+        img = equalize_histogram(img)
+        seg = np.ma.masked_less_equal(seg, 0)
+        seg.set_fill_value(0)
+        # For QC reports, axial mosaics will often have smaller height than width
+        # (e.g. WxH = 20x3 slice images). So, we want to reduce the fig height to match this.
+        # `size_fig` is in inches. So, dpi=300 --> 1500px, dpi=100 --> 500px, etc.
+        size_fig = [5, 5 * (img.shape[0] / img.shape[1]) * aspect]
+
+        # Generate the second QC report image
+        fig = mpl_figure.Figure()
+        fig.set_size_inches(*size_fig, forward=True)
+        mpl_backend_agg.FigureCanvasAgg(fig)
+        ax = fig.add_axes((0, 0, 1, 1))
+        ax.imshow(seg,
                   cmap=colormaps[i],
                   norm=None,
                   alpha=1.0,
@@ -181,8 +158,8 @@ def sct_deepseg_spinal_rootlets_t2w(
                   aspect=aspect)
         if outline:
             # linewidth 0.5 is too thick, 0.25 is too thin
-            plot_outlines(img, ax=ax, facecolor='none', edgecolor='black', linewidth=0.3)
-        add_segmentation_labels(ax, img, colors=colormaps[i].colors, radius=tuple(r*scale for r in radius))
+            plot_outlines(seg, ax=ax, facecolor='none', edgecolor='black', linewidth=0.1)
+        # add_segmentation_labels(ax, seg, colors=colormaps[i].colors, radius=tuple(r*scale for r in radius))
 
     ax.get_xaxis().set_visible(False)
     ax.get_yaxis().set_visible(False)
@@ -190,8 +167,20 @@ def sct_deepseg_spinal_rootlets_t2w(
     logger.debug('Save image %s', img_path)
     fig.savefig(img_path, format='png', transparent=True, dpi=300)
 
+    fig = mpl_figure.Figure()
+    fig.set_size_inches(*size_fig, forward=True)
+    mpl_backend_agg.FigureCanvasAgg(fig)
+    ax = fig.add_axes((0, 0, 1, 1))
+    ax.imshow(img, cmap='gray', interpolation='none', aspect=aspect)
+    add_orientation_labels(ax, radius=tuple(r*scale for r in radius), letters=['S', 'I', 'P', 'A'])
+    ax.get_xaxis().set_visible(False)
+    ax.get_yaxis().set_visible(False)
+    img_path = str(imgs_to_generate['path_background_img'])
+    logger.debug('Save image %s', img_path)
+    fig.savefig(img_path, format='png', transparent=True, dpi=300)
 
-def mosaic(img: Image, centers: np.ndarray, radius: tuple[int, int] = (15, 15), scale: int = 1):
+
+def mosaic(img: Image, seg: Image, radius: tuple[int, int] = (15, 15), scale: int = 1):
     """
     Arrange the slices of `img` into a grid of images.
 
@@ -201,29 +190,33 @@ def mosaic(img: Image, centers: np.ndarray, radius: tuple[int, int] = (15, 15), 
     If `img` has N slices, then `centers` should have shape (N, 2).
     """
     # Fit as many slices as possible in each row of 600 pixels
-    num_col = math.floor(4000 / (2*radius[0]*scale))
+    num_col = math.floor(12000 / (2*radius[0]*scale))
 
     # Center and crop each axial slice
-    cropped = []
-    for center, slice in zip(centers.astype(int), img.data):
-        # If the `center` coordinate is close to the edge, then move it away from the edge to capture more of the image
-        # In other words, make sure the `center` coordinate is at least `radius` pixels away from the edge
-        for i in [0, 1]:
-            center[i] = min(slice.shape[i] - radius[i], center[i])  # Check far edge first
-            center[i] = max(radius[i],                  center[i])  # Then check 0 edge last
-        # Add a margin before cropping, in case the center is still too close to one of the edges
-        # Also, use Kronecker product to scale each block in multiples
-        cropped.append(np.kron(np.pad(slice, [[r] for r in radius])[
-            center[0]:center[0] + 2*radius[0],
-            center[1]:center[1] + 2*radius[1],
-        ], np.ones((scale, scale))))
+    cropped_img = []
+    cropped_seg = []
+    for sliceImg, sliceSeg in zip(img.data, seg.data):
+        if sliceSeg.any():
+            # Add a margin before cropping, in case the center is still too close to one of the edges
+            # Also, use Kronecker product to scale each block in multiples
+            cropped_img.append(np.kron(np.pad(sliceImg, [[r] for r in radius])[
+                radius[0]:radius[0] + 2*radius[0],
+                radius[1]:radius[1] + 2*radius[1],
+            ], np.ones((scale, scale))))
+            cropped_seg.append(np.kron(np.pad(sliceSeg, [[r] for r in radius])[
+                radius[0]:radius[0] + 2*radius[0],
+                radius[1]:radius[1] + 2*radius[1],
+            ], np.ones((scale, scale))))
 
     # Pad the list with empty arrays, to get complete rows of num_col
     empty = np.zeros((2*radius[0]*scale, 2*radius[1]*scale))
-    cropped.extend([empty] * (-len(cropped) % num_col))
+    cropped_img.extend([empty] * (-len(cropped_img) % num_col))
+    cropped_seg.extend([empty] * (-len(cropped_seg) % num_col))
 
     # Arrange the images into a grid
-    return np.block([cropped[i:i+num_col] for i in range(0, len(cropped), num_col)])
+    out_img = np.block([cropped_img[i:i+num_col] for i in range(0, len(cropped_img), num_col)])
+    out_seg = np.block([cropped_seg[i:i+num_col] for i in range(0, len(cropped_seg), num_col)])
+    return out_img, out_seg
 
 
 if __name__ == '__main__':
