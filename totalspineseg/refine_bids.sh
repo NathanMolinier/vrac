@@ -73,7 +73,7 @@ for file in $(ls "$IMG_FOLDER");do
 
     # QC spine
     conda activate /home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/code/spinalcordtoolbox/python/envs/venv_sct 
-    python ~/data_nvme_p118739/code/vrac/totalspineseg/create_jsonsidecars.py -i "$IMG_FOLDER"/"$file" -s "$LABEL_FOLDER"/"$sub"/anat/"$file_noext"_label-spine_dseg.nii.gz -o "$QC_SPINE_FOLDER"
+    python ~/data_nvme_p118739/code/vrac/totalspineseg/qc_tss.py -i "$IMG_FOLDER"/"$file" -s "$LABEL_FOLDER"/"$sub"/anat/"$file_noext"_label-spine_dseg.nii.gz -o "$QC_SPINE_FOLDER"
     conda deactivate
 
 done
