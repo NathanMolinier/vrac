@@ -118,8 +118,8 @@ def refine_segmentation(session, img_path, seg_path, output_path):
     ##########################################
 
     # Save results
-    canal_path = os.path.join(output_path, img_path.replace('.nii.gz', '_label-canal_seg.nii.gz'))
-    spine_path = os.path.join(output_path, img_path.replace('.nii.gz', '_label-spine_dseg.nii.gz'))
+    canal_path = os.path.join(output_path, os.path.basename(img_path).replace('.nii.gz', '_label-canal_seg.nii.gz'))
+    spine_path = os.path.join(output_path, os.path.basename(img_path).replace('.nii.gz', '_label-spine_dseg.nii.gz'))
 
     print(f"Saving canal to {canal_path}")
     canal_img.data = canal_img.data.astype(np.uint8)
