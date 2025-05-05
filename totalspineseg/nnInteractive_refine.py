@@ -149,7 +149,7 @@ def main():
     # Define paths
     img_path = args.image
     seg_path = args.seg
-    output_path = args.outpath
+    output_path = args.ofolder
 
     # Define constants
     REPO_ID = "nnInteractive/nnInteractive"
