@@ -32,14 +32,14 @@ mkdir -p "$PRED_FOLDER"
 mkdir -p "$LABEL_FOLDER"
 
 # Copy images in same folder
-cp $(find sub-amuAL -type f -name '*.nii.gz' | grep -v .git) "$IMG_FOLDER"
+cp $(find sub* -type f -name '*.nii.gz' | grep -v .git) "$IMG_FOLDER"
 
 # Run totalspineseg on BIDS dataset
 source /usr/local/miniforge3/etc/profile.d/conda.sh
 conda activate tss_env
 echo Running TotalSpineSeg
 echo 
-# totalspineseg "$IMG_FOLDER" "$PRED_FOLDER" -k step2_output
+totalspineseg "$IMG_FOLDER" "$PRED_FOLDER" -k step2_output
 conda deactivate
 
 # Run nnInteractive using the predictions
@@ -51,7 +51,7 @@ for file in $(ls "$IMG_FOLDER");do
 
     # Run nnInteractive
     conda activate nnInteractive
-    # python ~/data_nvme_p118739/code/vrac/totalspineseg/nnInteractive_refine.py -i "$IMG_FOLDER"/"$file" -s "$PRED_FOLDER"/step2_output/"$file" -o "$LABEL_FOLDER"/"$sub"/anat
+    python ~/data_nvme_p118739/code/vrac/totalspineseg/nnInteractive_refine.py -i "$IMG_FOLDER"/"$file" -s "$PRED_FOLDER"/step2_output/"$file" -o "$LABEL_FOLDER"/"$sub"/anat
 
     # Create JSON sidecars
     CANAL_NEW="$LABEL_FOLDER"/"$sub"/anat/"$file_noext"_label-canal_seg.json
