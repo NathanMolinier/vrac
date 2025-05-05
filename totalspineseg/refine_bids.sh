@@ -51,7 +51,7 @@ for file in $(ls "$IMG_FOLDER");do
 
     # Run nnInteractive
     conda activate nnInteractive
-    python ~/data_nvme_p118739/code/vrac/totalspineseg/nnInteractive_refine.py -i "$IMG_FOLDER"/"$file" -s "$PRED_FOLDER"/step2_output/"$file" -o "$LABEL_FOLDER"/"$sub"/anat
+    # python ~/data_nvme_p118739/code/vrac/totalspineseg/nnInteractive_refine.py -i "$IMG_FOLDER"/"$file" -s "$PRED_FOLDER"/step2_output/"$file" -o "$LABEL_FOLDER"/"$sub"/anat
 
     # Create JSON sidecars
     CANAL_NEW="$LABEL_FOLDER"/"$sub"/anat/"$file_noext"_label-canal_seg.json
@@ -69,7 +69,7 @@ for file in $(ls "$IMG_FOLDER");do
     fi
 
     # QC canal
-    sct_qc -i "$IMG_FOLDER"/"$file" -s "$LABEL_FOLDER"/"$sub"/anat/"$file_noext"_label-canal_seg.nii.gz -p sct_deepseg_sc -o "$QC_CANAL_FOLDER"
+    sct_qc -i "$IMG_FOLDER"/"$file" -s "$LABEL_FOLDER"/"$sub"/anat/"$file_noext"_label-canal_seg.nii.gz -p sct_deepseg_sc -qc "$QC_CANAL_FOLDER"
 
     # QC spine
     conda activate /home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/code/spinalcordtoolbox/python/envs/venv_sct 
