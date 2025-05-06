@@ -7,6 +7,7 @@ import torchio as tio
 import scipy.ndimage as ndi
 from scipy.stats import norm
 from functools import partial
+import gc
 
 import random
 
@@ -465,35 +466,50 @@ def aug_motion(img, seg):
         image=tio.ScalarImage(tensor=img),
         seg=tio.LabelMap(tensor=seg)
     ))
-    return subject.image.data, subject.seg.data
+    img_out, seg_out = subject.image.data, subject.seg.data
+    del subject
+    gc.collect()  # Force garbage collection
+    return img_out, seg_out
 
 def aug_ghosting(img, seg):
     subject = tio.RandomGhosting()(tio.Subject(
         image=tio.ScalarImage(tensor=img),
         seg=tio.LabelMap(tensor=seg)
     ))
-    return subject.image.data, subject.seg.data
+    img_out, seg_out = subject.image.data, subject.seg.data
+    del subject
+    gc.collect()  # Force garbage collection
+    return img_out, seg_out
 
 def aug_spike(img, seg):
     subject = tio.RandomSpike(intensity=(1, 2))(tio.Subject(
         image=tio.ScalarImage(tensor=img),
         seg=tio.LabelMap(tensor=seg)
     ))
-    return subject.image.data, subject.seg.data
+    img_out, seg_out = subject.image.data, subject.seg.data
+    del subject
+    gc.collect()  # Force garbage collection
+    return img_out, seg_out
 
 def aug_bias_field(img, seg):
     subject = tio.RandomBiasField()(tio.Subject(
         image=tio.ScalarImage(tensor=img),
         seg=tio.LabelMap(tensor=seg)
     ))
-    return subject.image.data, subject.seg.data
+    img_out, seg_out = subject.image.data, subject.seg.data
+    del subject
+    gc.collect()  # Force garbage collection
+    return img_out, seg_out
 
 def aug_blur(img, seg):
     subject = tio.RandomBlur()(tio.Subject(
         image=tio.ScalarImage(tensor=img),
         seg=tio.LabelMap(tensor=seg)
     ))
-    return subject.image.data, subject.seg.data
+    img_out, seg_out = subject.image.data, subject.seg.data
+    del subject
+    gc.collect()  # Force garbage collection
+    return img_out, seg_out
 
 def aug_noise(img, seg):
     original_mean, original_std = img.mean(), img.std()
@@ -503,14 +519,20 @@ def aug_noise(img, seg):
         seg=tio.LabelMap(tensor=seg)
     ))
     img = img  * original_std + original_mean
-    return subject.image.data, subject.seg.data
+    img_out, seg_out = subject.image.data, subject.seg.data
+    del subject
+    gc.collect()  # Force garbage collection
+    return img_out, seg_out
 
 def aug_swap(img, seg):
     subject = tio.RandomSwap()(tio.Subject(
         image=tio.ScalarImage(tensor=img),
         seg=tio.LabelMap(tensor=seg)
     ))
-    return subject.image.data, subject.seg.data
+    img_out, seg_out = subject.image.data, subject.seg.data
+    del subject
+    gc.collect()  # Force garbage collection
+    return img_out, seg_out
 
 ### Spatial augmentation (Flip, Affine, Elastic, Anisotropy) --> removed BSpline
 
@@ -564,27 +586,39 @@ def aug_flip(img, seg):
         image=tio.ScalarImage(tensor=img),
         seg=tio.LabelMap(tensor=seg)
     ))
-    return subject.image.data, subject.seg.data
+    img_out, seg_out = subject.image.data, subject.seg.data
+    del subject
+    gc.collect()  # Force garbage collection
+    return img_out, seg_out
 
 def aug_affine(img, seg):
     subject = tio.RandomAffine()(tio.Subject(
         image=tio.ScalarImage(tensor=img),
         seg=tio.LabelMap(tensor=seg)
     ))
-    return subject.image.data, subject.seg.data
+    img_out, seg_out = subject.image.data, subject.seg.data
+    del subject
+    gc.collect()  # Force garbage collection
+    return img_out, seg_out
 
 def aug_elastic(img, seg):
     subject = tio.RandomElasticDeformation(max_displacement=40)(tio.Subject(
         image=tio.ScalarImage(tensor=img),
         seg=tio.LabelMap(tensor=seg)
     ))
-    return subject.image.data, subject.seg.data
+    img_out, seg_out = subject.image.data, subject.seg.data
+    del subject
+    gc.collect()  # Force garbage collection
+    return img_out, seg_out
 
 def aug_anisotropy(img, seg, downsampling=7):
     subject = tio.RandomAnisotropy(downsampling=downsampling)(tio.Subject(
         image=tio.ScalarImage(tensor=img),
         seg=tio.LabelMap(tensor=seg, axis=0)
     ))
-    return subject.image.data, subject.seg.data
+    img_out, seg_out = subject.image.data, subject.seg.data
+    del subject
+    gc.collect()  # Force garbage collection
+    return img_out, seg_out
 
 
