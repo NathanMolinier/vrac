@@ -39,7 +39,7 @@ source /usr/local/miniforge3/etc/profile.d/conda.sh
 conda activate tss_env
 echo Running TotalSpineSeg
 echo 
-#totalspineseg "$IMG_FOLDER" "$PRED_FOLDER" -k step2_output
+totalspineseg "$IMG_FOLDER" "$PRED_FOLDER" -k step2_output
 conda deactivate
 
 # Run nnInteractive using the predictions
@@ -51,25 +51,25 @@ for file in $(ls "$IMG_FOLDER");do
 
     # Run nnInteractive
     conda activate nnInteractive
-    #python ~/data_nvme_p118739/code/vrac/totalspineseg/nnInteractive_refine.py -i "$IMG_FOLDER"/"$file" -s "$PRED_FOLDER"/step2_output/"$file" -o "$LABEL_FOLDER"/"$sub"/anat
+    python ~/data_nvme_p118739/code/vrac/totalspineseg/nnInteractive_refine.py -i "$IMG_FOLDER"/"$file" -s "$PRED_FOLDER"/step2_output/"$file" -o "$LABEL_FOLDER"/"$sub"/anat
 
     # Create JSON sidecars
     CANAL_NEW="$LABEL_FOLDER"/"$sub"/anat/"$file_noext"_label-canal_seg.json
-    #python ~/data_nvme_p118739/code/vrac/totalspineseg/create_jsonsidecars.py -path-json "$CANAL_NEW"
+    python ~/data_nvme_p118739/code/vrac/totalspineseg/create_jsonsidecars.py -path-json "$CANAL_NEW"
 
     SPINE_NEW="$LABEL_FOLDER"/"$sub"/anat/"$file_noext"_label-spine_dseg.json
-    #python ~/data_nvme_p118739/code/vrac/totalspineseg/create_jsonsidecars.py -path-json "$SPINE_NEW"
+    python ~/data_nvme_p118739/code/vrac/totalspineseg/create_jsonsidecars.py -path-json "$SPINE_NEW"
     conda deactivate
 
     # Replace canal if Abel already corrected
-    # CANAL_OLD=derivatives/labels/"$sub"/anat/"$file_noext"_label-canal_seg
-    # if $(cat "$CANAL_OLD".json | grep -q "Abel Salmona"); 
-    # then 
-    #     cp "$CANAL_OLD"* "$LABEL_FOLDER"/"$sub"/anat;
-    # fi
+    CANAL_OLD=derivatives/labels/"$sub"/anat/"$file_noext"_label-canal_seg
+    if $(cat "$CANAL_OLD".json | grep -q "Abel Salmona"); 
+    then 
+        cp "$CANAL_OLD"* "$LABEL_FOLDER"/"$sub"/anat;
+    fi
 
     # QC canal
-    # sct_qc -i "$IMG_FOLDER"/"$file" -s "$LABEL_FOLDER"/"$sub"/anat/"$file_noext"_label-canal_seg.nii.gz -p sct_deepseg_sc -qc "$QC_CANAL_FOLDER"
+    sct_qc -i "$IMG_FOLDER"/"$file" -s "$LABEL_FOLDER"/"$sub"/anat/"$file_noext"_label-canal_seg.nii.gz -p sct_deepseg_sc -qc "$QC_CANAL_FOLDER"
 
     # QC spine
     conda activate /home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/code/spinalcordtoolbox/python/envs/venv_sct 
