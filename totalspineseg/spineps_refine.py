@@ -104,17 +104,18 @@ def main():
                 val_tss = unique_tss[i]
                 dice = compute_dsc(np.where(tss.data == val_tss, 1, 0), np.where(spineps.data == val, 1, 0))
                 i+=1
-                dice_dict = {dice:val_tss}
+                dice_dict[dice] = val_tss
                 if i == len(unique_tss):
                     i = 0            
             
             # Avoid infinite loop
             if c == len(unique_tss) + 1:
-                if dice_dict[np.max(dice_dict.keys())] == val_output_list[-1] + 1: # Low dice but following structure
+                if dice_dict[np.max(list(dice_dict.keys()))] == val_output_list[-1] + 1: # Low dice but following structure
                     # Add spineps segmentation to output with tss label value
-                    val_tss = dice_dict[np.max(dice_dict.keys())]
+                    val_tss = dice_dict[np.max(list(dice_dict.keys()))]
                     val_output_list.append(val_tss)
                     output.data[np.where(spineps.data == val)] = val_tss
+                    print(f'Low dice for structure {val_tss} with DSC={np.max(list(dice_dict.keys()))}')
                 else:
                     err_file.append(f'{spineps_file} : {val}\n')
             else:
