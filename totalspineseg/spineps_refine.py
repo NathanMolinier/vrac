@@ -98,7 +98,7 @@ def main():
         for val in unique_spineps:
             dice = 0
             c = 0
-            while dice < 0.6 and c < len(unique_tss)+1:
+            while dice < 0.5 and c < len(unique_tss)+1:
                 c+=1
                 val_tss = unique_tss[i]
                 dice = compute_dsc(np.where(tss.data == val_tss, 1, 0), np.where(spineps.data == val, 1, 0))
