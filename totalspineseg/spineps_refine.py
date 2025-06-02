@@ -74,7 +74,7 @@ def main():
         sub = os.path.basename(spineps_file).split('_')[0]
 
         # Fetch totalspineseg segmentation
-        gl = glob.glob(tss_folder + "/**/*" + sub + "_T2w_label-spine_dseg.nii.gz", recursive=True) 
+        gl = glob.glob(tss_folder + "/" + sub + "*.nii.gz", recursive=True) 
         if len(gl) > 1:
             raise ValueError(f'Multiple files detected for {sub}: {"\n".join(gl)}')
         
