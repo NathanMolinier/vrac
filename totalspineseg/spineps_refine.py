@@ -1,0 +1,130 @@
+"""
+The aim of this script is to generate ground truth segmentation for TotalSpineSeg using Spineps' predictions (https://github.com/Hendrik-code/spineps). 
+While the segmentation quality is good, quality control revealed the necessity for correction of the labeling. Also the C1 vertebrae is not segmented.
+This script uses both TotalSpineSeg and Spineps prediction to generate better ground truths.
+"""
+
+import argparse, os, glob, yaml, json
+from vrac.data_management.image import Image, zeros_like
+from vrac.utils.metrics import compute_dsc
+import time 
+import numpy as np
+
+def get_parser():
+    # parse command line arguments
+    parser = argparse.ArgumentParser(description='Refine segmentation using nnInteractive.')
+    parser.add_argument('-spineps', required=True, help='Path to the predictions of spineps (Required)')
+    parser.add_argument('-totalspineseg', required=True, help='Path to the predictions of totalspineseg (Required)')
+    parser.add_argument('-qcfail', required=True, help='Path to the QC fail (Required)')
+    parser.add_argument('-ofolder', required=True, help='Path to the output folder (Required)')
+    return parser
+
+def create_json_file(path_json_out):
+    """
+    Create a json sidecar file
+    :param path_file_out: path to the output file
+    """
+    
+    data_json = {
+        "SpatialReference": "orig",
+        "GeneratedBy": [
+            {
+                "Name": "totalspineseg",
+                "Link": "https://github.com/neuropoly/totalspineseg",
+                "Version": "r20250224",
+                "Date": time.strftime('%Y-%m-%d %H:%M:%S')
+            },
+            {
+                "Name": "spineps",
+                "Link": "https://github.com/Hendrik-code/spineps",
+                "Version": "v1.4.1",
+                "Date": time.strftime('%Y-%m-%d %H:%M:%S')
+            },
+            {
+                "Name": "Manual",
+                "Author": "Nathan Molinier",
+                "Date": time.strftime('%Y-%m-%d %H:%M:%S')
+            }
+        ]
+    }
+    with open(path_json_out, 'w') as f:
+        json.dump(data_json, f, indent=4)
+        print(f'Created: {path_json_out}')
+
+def main():
+    # Load parser
+    parser = get_parser()
+    args = parser.parse_args()
+
+    # Define paths
+    spineps_folder = args.spineps
+    tss_folder = args.totalspineseg
+    output_folder = args.ofolder
+
+    # Load yaml file
+    with open(args.qcfail, 'r') as stream:
+        subject_fail = [os.path.basename(file).split('_')[0] for file in yaml.safe_load(stream)["FILES_LABEL"]]
+
+    # List paths
+    spineps_files = [file for file in glob.glob(spineps_folder + "/*" + "_seg-vert_msk.nii.gz", recursive=True) if not os.path.basename(file).split('_')[0] in subject_fail]
+
+    err_file = []
+    for spineps_file in spineps_files:
+        sub = os.path.basename(spineps_file).split('_')[0]
+
+        # Fetch totalspineseg segmentation
+        gl = glob.glob(tss_folder + "/**/*" + sub + "_T2w_label-spine_dseg.nii.gz", recursive=True) 
+        if len(gl) > 1:
+            raise ValueError(f'Multiple files detected for {sub}: {'\n'.join(gl)}')
+        
+        tss_file = gl[0]
+
+        # Load images
+        tss = Image(tss_file).change_orientation('RSP')
+        spineps = Image(spineps_file).change_orientation('RSP')
+        output = zeros_like(tss)
+
+        # Fetch unique values from segmentation
+        unique_tss = [val for val in np.unique(tss.data) if val != 0 and val != 11]
+        unique_spineps = [val for val in np.unique(spineps.data) if val != 0 and val < 200]
+
+        # Add C1 segmentation to output from tss segmentation
+        output.data[np.where(tss.data == 11)] = 11
+
+        # Loop over all the structures and compute the dice
+        i = 0
+        val_output_list = []
+        for val in unique_spineps:
+            dice = 0
+            c = 0
+            while dice < 0.5 and c < len(unique_tss)+1:
+                c+=1
+                val_tss = unique_tss[i]
+                dice = compute_dsc(np.where(tss.data == val_tss, 1, 0), np.where(spineps.data == val, 1, 0))
+                i+=1
+                if i == len(unique_tss):
+                    i = 0
+            
+            # Avoid infinite loop
+            if c == len(unique_tss) + 1:
+                err_file.append(f'{spineps_file} : {val}\n')
+            else:
+                # Add spineps segmentation to output with tss label value
+                val_output_list.append(val_tss)
+                output.data[np.where(spineps.data == val)] = val_tss
+
+        # Create output directory
+        output_path = os.path.join(output_folder, sub, 'anat', sub + "_T2w_label-spine_dseg.nii.gz")
+        if not os.path.exists(os.path.dirname(output_path)):
+            os.makedirs(os.path.dirname(output_path))
+        
+        # Save output file
+        output.change_orientation('RPI').save(output_path)
+        create_json_file(output_path.replace('.nii.gz', '.json'))
+        
+        with open(os.path.join(output_folder, 'err.txt'), 'w') as f:
+            f.writelines(err_file)
+
+
+if __name__ == '__main__':
+    main()
