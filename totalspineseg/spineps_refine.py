@@ -98,17 +98,25 @@ def main():
         for val in unique_spineps:
             dice = 0
             c = 0
+            dice_dict = {}
             while dice < 0.5 and c < len(unique_tss)+1:
                 c+=1
                 val_tss = unique_tss[i]
                 dice = compute_dsc(np.where(tss.data == val_tss, 1, 0), np.where(spineps.data == val, 1, 0))
                 i+=1
+                dice_dict = {dice:val_tss}
                 if i == len(unique_tss):
-                    i = 0
+                    i = 0            
             
             # Avoid infinite loop
             if c == len(unique_tss) + 1:
-                err_file.append(f'{spineps_file} : {val}\n')
+                if dice_dict[np.max(dice_dict.keys())] == val_output_list[-1] + 1: # Low dice but following structure
+                    # Add spineps segmentation to output with tss label value
+                    val_tss = dice_dict[np.max(dice_dict.keys())]
+                    val_output_list.append(val_tss)
+                    output.data[np.where(spineps.data == val)] = val_tss
+                else:
+                    err_file.append(f'{spineps_file} : {val}\n')
             else:
                 # Add spineps segmentation to output with tss label value
                 val_output_list.append(val_tss)
