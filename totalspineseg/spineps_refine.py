@@ -63,7 +63,8 @@ def main():
 
     # Load yaml file
     with open(args.qcfail, 'r') as stream:
-        subject_fail = [os.path.basename(file).split('_')[0] for file in yaml.safe_load(stream)["FILES_LABEL"]]
+        yaml_dict = yaml.safe_load(stream)
+        subject_fail = [os.path.basename(file).split('_')[0] for file in yaml_dict["FILES_LABEL"]]
 
     # List paths
     spineps_files = [file for file in glob.glob(spineps_folder + "/*" + "_seg-vert_msk.nii.gz", recursive=True) if not os.path.basename(file).split('_')[0] in subject_fail]
@@ -97,7 +98,7 @@ def main():
         for val in unique_spineps:
             dice = 0
             c = 0
-            while dice < 0.5 and c < len(unique_tss)+1:
+            while dice < 0.6 and c < len(unique_tss)+1:
                 c+=1
                 val_tss = unique_tss[i]
                 dice = compute_dsc(np.where(tss.data == val_tss, 1, 0), np.where(spineps.data == val, 1, 0))
