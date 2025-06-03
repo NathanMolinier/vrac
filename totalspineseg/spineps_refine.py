@@ -86,7 +86,7 @@ def main():
         output = zeros_like(tss)
 
         # Fetch unique values from segmentation
-        unique_tss = [val for val in np.unique(tss.data) if val != 0 and val != 11]
+        unique_tss = [val for val in np.unique(tss.data) if val not in [0, 1, 2, 11]]
         unique_spineps = [val for val in np.unique(spineps.data) if val != 0 and val < 200]
 
         # Add C1 segmentation to output from tss segmentation
@@ -104,7 +104,7 @@ def main():
                 val_tss = unique_tss[i]
                 dice = compute_dsc(np.where(tss.data == val_tss, 1, 0), np.where(spineps.data == val, 1, 0))
                 i+=1
-                dice_dict[dice] = val_tss
+                dice_dict[val_tss] = dice
                 if i == len(unique_tss):
                     i = 0            
             
@@ -133,10 +133,14 @@ def main():
         output_path = os.path.join(output_folder, sub, 'anat', sub + "_T2w_label-spine_dseg.nii.gz")
         if not os.path.exists(os.path.dirname(output_path)):
             os.makedirs(os.path.dirname(output_path))
-        
+    
         # Save output file
         output.change_orientation('RPI').save(output_path)
         create_json_file(output_path.replace('.nii.gz', '.json'))
+        
+        # Check if same labels in output and totalspineseg
+        if sorted(val_output_list) != sorted(unique_tss):
+            err_file.append(output_path + " " + str(val_output_list))
         
         with open(os.path.join(output_folder, 'err.txt'), 'w') as f:
             f.writelines(err_file)
