@@ -15,6 +15,7 @@ def get_parser():
     parser = argparse.ArgumentParser(description='Refine segmentation using nnInteractive.')
     parser.add_argument('-spineps', required=True, help='Path to the predictions of spineps (Required)')
     parser.add_argument('-totalspineseg', required=True, help='Path to the predictions of totalspineseg (Required)')
+    parser.add_argument('-canal', required=True, help='Path to the canal segmentations (Required)')
     parser.add_argument('-qcfail', required=True, help='Path to the QC fail (Required)')
     parser.add_argument('-ofolder', required=True, help='Path to the output folder (Required)')
     return parser
@@ -59,6 +60,7 @@ def main():
     # Define paths
     spineps_folder = args.spineps
     tss_folder = args.totalspineseg
+    canal_folder = args.canal
     output_folder = args.ofolder
 
     # Load yaml file
@@ -80,9 +82,17 @@ def main():
         
         tss_file = gl[0]
 
+        # Fetch canal segmentation
+        gl = glob.glob(canal_folder + "/**/*" + sub + "_T2w_label-canal_seg.nii.gz", recursive=True) 
+        if len(gl) > 1:
+            raise ValueError(f'Multiple files detected for {sub}: {"\n".join(gl)}')
+        
+        canal_file = gl[0]
+
         # Load images
         tss = Image(tss_file).change_orientation('RSP')
         spineps = Image(spineps_file).change_orientation('RSP')
+        canal = Image(canal_file).change_orientation('RSP')
         output = zeros_like(tss)
 
         # Fetch unique values from segmentation
@@ -131,6 +141,9 @@ def main():
                 # Add spineps segmentation to output with tss label value
                 val_output_list.append(val_tss)
                 output.data[np.where(spineps.data == val)] = val_tss
+        
+        # Remove segmentation in canal region
+        output.data[canal.data.astype(bool)] = 0
 
         # Create output directory
         output_path = os.path.join(output_folder, sub, 'anat', sub + "_T2w_label-spine_dseg.nii.gz")
