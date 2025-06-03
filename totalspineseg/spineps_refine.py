@@ -143,7 +143,7 @@ def main():
         
         # Check if same labels in output and totalspineseg
         if sorted(val_output_list) != sorted(unique_tss):
-            err_file.append(output_path + " " + str(val_output_list))
+            err_file.append("\n" + output_path + " - missing: " + str(np.array(unique_tss)[~np.in1d(unique_tss, val_output_list)].tolist()))
         
         with open(os.path.join(output_folder, 'err.txt'), 'w') as f:
             f.writelines(err_file)
