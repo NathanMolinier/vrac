@@ -121,9 +121,12 @@ def main():
                         if dice_dict[test_val] > max_dice and 60 < test_val < 101: # TSS discs
                             max_dice = dice_dict[test_val]
                             val_tss = test_val
-                val_output_list.append(val_tss)
-                output.data[np.where(spineps.data == val)] = val_tss
-                print(f'Low dice for structure {val_tss} with DSC={max_dice}')
+                if max_dice == 0:
+                    print(f"Structure {val} from SPINEPS does not match any structure for TotalSpineSeg")
+                else:
+                    val_output_list.append(val_tss)
+                    output.data[np.where(spineps.data == val)] = val_tss
+                    print(f'Low dice for structure {val} asociated with {val_tss} with DSC={max_dice}')
             else:
                 # Add spineps segmentation to output with tss label value
                 val_output_list.append(val_tss)
