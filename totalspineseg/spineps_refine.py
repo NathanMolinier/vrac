@@ -110,14 +110,20 @@ def main():
             
             # Avoid infinite loop
             if c == len(unique_tss) + 1:
-                if dice_dict[np.max(list(dice_dict.keys()))] == val_output_list[-1] + 1: # Low dice but following structure
-                    # Add spineps segmentation to output with tss label value
-                    val_tss = dice_dict[np.max(list(dice_dict.keys()))]
-                    val_output_list.append(val_tss)
-                    output.data[np.where(spineps.data == val)] = val_tss
-                    print(f'Low dice for structure {val_tss} with DSC={np.max(list(dice_dict.keys()))}')
-                else:
-                    err_file.append(f'{spineps_file} : {val}\n')
+                max_dice = 0
+                if val < 100: # Spineps vertebrae
+                    for test_val in dice_dict.keys():
+                        if dice_dict[test_val] > max_dice and 10 < test_val < 60: # TSS vertebrae
+                            max_dice = dice_dict[test_val]
+                            val_tss = test_val
+                else: # Spineps discs
+                    for test_val in dice_dict.keys():
+                        if dice_dict[test_val] > max_dice and 60 < test_val < 101: # TSS discs
+                            max_dice = dice_dict[test_val]
+                            val_tss = test_val
+                val_output_list.append(val_tss)
+                output.data[np.where(spineps.data == val)] = val_tss
+                print(f'Low dice for structure {val_tss} with DSC={max_dice}')
             else:
                 # Add spineps segmentation to output with tss label value
                 val_output_list.append(val_tss)
