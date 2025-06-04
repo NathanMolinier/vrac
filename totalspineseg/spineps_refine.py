@@ -38,7 +38,7 @@ def create_json_file(path_json_out):
             {
                 "Name": "spineps",
                 "Link": "https://github.com/Hendrik-code/spineps",
-                "Version": "v1.4.1",
+                "Version": "v1.3.1",
                 "Date": time.strftime('%Y-%m-%d %H:%M:%S')
             },
             {
