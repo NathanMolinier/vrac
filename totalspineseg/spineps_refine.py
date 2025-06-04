@@ -16,7 +16,6 @@ def get_parser():
     parser.add_argument('-spineps', required=True, help='Path to the predictions of spineps (Required)')
     parser.add_argument('-totalspineseg', required=True, help='Path to the predictions of totalspineseg (Required)')
     parser.add_argument('-canal', required=True, help='Path to the canal segmentations (Required)')
-    parser.add_argument('-qcfail', required=True, help='Path to the QC fail (Required)')
     parser.add_argument('-ofolder', required=True, help='Path to the output folder (Required)')
     return parser
 
@@ -63,13 +62,8 @@ def main():
     canal_folder = args.canal
     output_folder = args.ofolder
 
-    # Load yaml file
-    with open(args.qcfail, 'r') as stream:
-        yaml_dict = yaml.safe_load(stream)
-        subject_fail = [os.path.basename(file).split('_')[0] for file in yaml_dict["FILES_LABEL"]]
-
     # List paths
-    spineps_files = [file for file in glob.glob(spineps_folder + "/*" + "_seg-vert_msk.nii.gz", recursive=True) if not os.path.basename(file).split('_')[0] in subject_fail]
+    spineps_files = [file for file in glob.glob(spineps_folder + "/*" + "_seg-vert_msk.nii.gz", recursive=True)]
 
     err_file = []
     for spineps_file in spineps_files:
