@@ -77,7 +77,7 @@ def main():
         tss_file = gl[0]
 
         # Fetch canal segmentation
-        gl = glob.glob(canal_folder + "/**/*" + sub + "_T2w_label-canal_seg.nii.gz", recursive=True) 
+        gl = glob.glob(canal_folder + "/" + sub + "_T2w_label-canal_seg.nii.gz", recursive=True) 
         if len(gl) > 1:
             raise ValueError(f'Multiple files detected for {sub}: {"\n".join(gl)}')
         
