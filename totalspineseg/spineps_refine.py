@@ -4,7 +4,7 @@ While the segmentation quality is good, quality control revealed the necessity f
 This script uses both TotalSpineSeg and Spineps prediction to generate better ground truths.
 """
 
-import argparse, os, glob, yaml, json
+import argparse, os, glob, json
 from vrac.data_management.image import Image, zeros_like
 from vrac.utils.metrics import compute_dsc
 import time 
@@ -38,11 +38,6 @@ def create_json_file(path_json_out):
                 "Name": "spineps",
                 "Link": "https://github.com/Hendrik-code/spineps",
                 "Version": "v1.3.1",
-                "Date": time.strftime('%Y-%m-%d %H:%M:%S')
-            },
-            {
-                "Name": "Manual",
-                "Author": "Nathan Molinier",
                 "Date": time.strftime('%Y-%m-%d %H:%M:%S')
             }
         ]
