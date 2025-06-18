@@ -74,13 +74,13 @@ def create_participants_tsv(participants_tsv_list, path_output):
         # Species
         species = ['homo sapiens']
 
-        # Add missing information age --> notes
-        missing_data = ['n/a']*5
+        # Extra info
+        extra_data = ['n/a', 'n/a', 'NRC', 'Balgrist University Hospital', 'n/a']
 
         # Add rows to tsv file
         participants_tsv_list = sorted(participants_tsv_list, key=lambda a : a[0])
         for item in participants_tsv_list:
-            tsv_writer.writerow(list(item) + species + missing_data)
+            tsv_writer.writerow(list(item) + species + extra_data)
         logger.info(f'participants.tsv created in {path_output}')
 
 
@@ -121,6 +121,7 @@ def create_participants_json(path_output):
             "LongName": "Pathology name",
             "Levels": {
                 "HC": "Healthy Control",
+                "NRC": "Nerve Root Compression",
                 "DCM": "Degenerative Cervical Myelopathy (synonymous with CSM - Cervical Spondylotic Myelopathy)",
                 "MildCompression": "Asymptomatic cord compression, without myelopathy",
                 "MS": "Multiple Sclerosis",
@@ -146,8 +147,8 @@ def create_dataset_description(path_output):
     :return:
     """
     data_json = {
-        "BIDSVersion": "BIDS 1.9.0",
-        "Name": "lumbar-balgrist",
+        "BIDSVersion": "1.9.0",
+        "Name": "nrc-lumbar-balgrist",
         "DatasetType": "raw"
     }
     if not os.path.isdir(path_output):
