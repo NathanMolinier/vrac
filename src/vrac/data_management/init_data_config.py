@@ -19,12 +19,14 @@ def get_parser():
     ## Parameters
     parser.add_argument('--txt', required=True,
                         help='Path to TXT file that contains only image or label paths. (Required)')
-    parser.add_argument('--type', choices=('LABEL', 'IMAGE', 'LABEL-SEG', 'CONTRAST-SC', 'CONTRAST'),
-                        help='Type of paths specified. Choices are "LABEL", "IMAGE", "LABEL-SEG", "CONTRAST-SC" or "CONTRAST". (Required)')
+    parser.add_argument('--type', choices=('LABEL', 'IMAGE', 'LABEL-MULTI', 'CONTRAST-SC', 'CONTRAST'),
+                        help='Type of paths specified. Choices are "LABEL", "IMAGE", "LABEL-MULTI", "CONTRAST-SC" or "CONTRAST". (Required)')
     parser.add_argument('--cont', type=str, default='',
                         help='If the type CONTRAST or CONTRAST-SC is selected, this variable specifies the wanted contrast for target.')
-    parser.add_argument('--suffix-seg', type=str, default='',
-                        help='If the type LABEL-SEG is selected, this variable specifies the suffix of the associated segmentation file. The segmentation must be stored insiade the same folder')
+    parser.add_argument('--suffixes', type=str, default='', nargs='+',
+                        help='If the type LABEL-MULTI is selected, this variable specifies the suffixes of the associated other label file. The labels must be stored inside the same folder')
+    parser.add_argument('--keys-list', type=str, default='', nargs='+',
+                        help='If the type LABEL-MULTI is selected, this variable specifies the keys used for each label file INCLUDING the default label.')
     parser.add_argument('--split-validation', type=float, default=0.1,
                         help='Split ratio for validation. Default=0.1')
     parser.add_argument('--split-test', type=float, default=0.1,
@@ -70,14 +72,16 @@ def main():
         img_paths_input = file_paths
         img_paths_target = [get_cont_path_from_other_cont(ip, target_contrast) for ip in img_paths_input]
         file_paths = img_paths_input + img_paths_target
-    elif args.type == 'LABEL-SEG':
-        seg_suffix = args.suffix_seg
-        if not seg_suffix:
-            raise ValueError(f'When using the type LABEL-SEG, please specify the suffix of the associated segmentation using the flag "--suffix-seg"')
-        label_paths = file_paths
-        img_paths = [get_img_path_from_label_path(lp) for lp in label_paths]
-        seg_paths = [get_seg_path_from_label_path(lp, seg_suffix=seg_suffix) for lp in label_paths]
-        file_paths = label_paths + img_paths + seg_paths
+    elif args.type == 'LABEL-MULTI':
+        suffixes = args.suffixes
+        if not suffixes:
+            raise ValueError(f'When using the type LABEL-MULTI, please specify the suffixes of the other associated labels using the flag "--suffixes"')
+        keys_list = args.keys_list
+        if len(keys_list) != len(suffixes) + 1:
+            raise ValueError(f'When using the type LABEL-MULTI, please specify a list of the keywords used INCLUDING the for the default label using the flag "--keys-list"')
+        img_paths = [get_img_path_from_label_path(lp) for lp in file_paths]
+        labels_list_paths = [file_paths] + [[get_seg_path_from_label_path(lp, seg_suffix=suf) for lp in file_paths] for suf in suffixes]
+        file_paths =  img_paths + [file for li in labels_list_paths for file in li]
     else:
         raise ValueError(f"invalid args.type: {args.type}")
     missing_paths = [
@@ -132,14 +136,14 @@ def main():
                 'INPUT_IMAGE':img_path_input.split(dataset_parent_path + '/')[-1], # Remove DATASETS_PATH
                 'TARGET_IMAGE':img_path_target.split(dataset_parent_path + '/')[-1],
             })
-    elif args.type == 'LABEL-SEG':
+    elif args.type == 'LABEL-MULTI':
         config_paths = []
-        for lp, ip, sp in zip(label_paths, img_paths, seg_paths):
-            config_paths.append({
-                'IMAGE':ip.split(dataset_parent_path + '/')[-1], # Remove DATASETS_PATH
-                'LABEL':lp.split(dataset_parent_path + '/')[-1],
-                'SEG':sp.split(dataset_parent_path + '/')[-1]
-            })
+        for i, ip in enumerate(img_paths):
+            d = {'IMAGE':ip.split(dataset_parent_path + '/')[-1]}
+            for k, li in zip(keys_list, labels_list_paths):
+                # Remove DATASETS_PATH
+                d[k] = li[i].split(dataset_parent_path + '/')[-1]
+            config_paths.append(d)
 
     else:
         config_paths = [{'IMAGE':path.split(dataset_parent_path + '/')[-1]} for path in img_paths] # Remove DATASETS_PATH
