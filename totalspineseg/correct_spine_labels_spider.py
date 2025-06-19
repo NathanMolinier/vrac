@@ -55,7 +55,7 @@ def main():
 
     # List paths
     labels_files = glob.glob(labels_folder + "/**/*_T2w_label-spine_dseg.nii.gz", recursive=True)
-    problem_spineps_list = ['sub-073', 'sub-058', 'sub-005', 'sub-253', 'sub-207', 'sub-082', 'sub-245', 'sub-015', 'sub-129', 'sub-001']
+    problem_spineps_list = ['sub-073', 'sub-058', 'sub-005', 'sub-253', 'sub-207', 'sub-082', 'sub-245', 'sub-015', 'sub-129', 'sub-001', 'sub-161', 'sub-110']
     problem_tss_list = ['sub-107', 'sub-085']
     problem_seg_list = ['sub-047']
     updated_list = []
@@ -63,277 +63,279 @@ def main():
         # Fetch subject
         sub_acq = os.path.basename(labels_file).split('_T2w')[0]
 
-        # Fetch spineps segmentation
-        gl = glob.glob(os.path.join(spineps_folder, sub_acq + "*_seg-vert_msk.nii.gz"))
-        if len(gl) > 1:
-            raise ValueError(f'Multiple files detected for {sub_acq}: {"\n".join(gl)}')
-        
-        spineps_file = gl[0]
-        
-        gl = glob.glob(os.path.join(tss_folder, sub_acq + "_T2w.nii.gz"))
-        if len(gl) > 1:
-            raise ValueError(f'Multiple files detected for {sub_acq}: {"\n".join(gl)}')
-        
-        tss_file = gl[0]
+        if sub_acq.split('_')[0] not in problem_spineps_list:
 
-        # Load images
-        labels_image = Image(labels_file).change_orientation('RPI')
-        spineps_image = Image(spineps_file).change_orientation('RPI')
-        tss_image = Image(tss_file).change_orientation('RPI')
+            # Fetch spineps segmentation
+            gl = glob.glob(os.path.join(spineps_folder, sub_acq + "*_seg-vert_msk.nii.gz"))
+            if len(gl) > 1:
+                raise ValueError(f'Multiple files detected for {sub_acq}: {"\n".join(gl)}')
+            
+            spineps_file = gl[0]
+            
+            gl = glob.glob(os.path.join(tss_folder, sub_acq + "_T2w.nii.gz"))
+            if len(gl) > 1:
+                raise ValueError(f'Multiple files detected for {sub_acq}: {"\n".join(gl)}')
+            
+            tss_file = gl[0]
 
-        # Check unique values in labels_image
-        labels_unique = [val for val in np.unique(labels_image.data) if val != 0]
+            # Load images
+            labels_image = Image(labels_file).change_orientation('RPI')
+            spineps_image = Image(spineps_file).change_orientation('RPI')
+            tss_image = Image(tss_file).change_orientation('RPI')
 
-        # Check if T1w image exists
-        labels_image_t1w = None
-        if os.path.exists(labels_file.replace('T2w', 'T1w')):
-            labels_file_t1w = labels_file.replace('T2w', 'T1w')
-            labels_image_t1w = Image(labels_file_t1w).change_orientation('RPI')
-            labels_unique_t1w = [val for val in np.unique(labels_image.data) if val != 0]
-            if not sorted(labels_unique_t1w) == sorted(labels_unique):
-                raise ValueError(f'Unique values are different between T1w and T2w for {labels_file}')
+            # Check unique values in labels_image
+            labels_unique = [val for val in np.unique(labels_image.data) if val != 0]
 
-        # Loop over the values and find corresponding structures for spineps and totalspineseg
-        new_val_list = []
-        spineps_list = []
-        new_val_pos = []
-        tss_list = []
-        for val in labels_unique: # Loop starts from the bootm lumbar vertebrae
-            mask_struc = np.where(labels_image.data == val, 1, 0).astype(bool)
-            spineps_val = np.median(spineps_image.data[mask_struc]) # Because segmentations are good, dice > 0.5, the median is used
-            tss_val = np.median(tss_image.data[mask_struc])
-            z_pos = np.mean(np.where(labels_image.data == val)[2])
+            # Check if T1w image exists
+            labels_image_t1w = None
+            if os.path.exists(labels_file.replace('T2w', 'T1w')):
+                labels_file_t1w = labels_file.replace('T2w', 'T1w')
+                labels_image_t1w = Image(labels_file_t1w).change_orientation('RPI')
+                labels_unique_t1w = [val for val in np.unique(labels_image.data) if val != 0]
+                if not sorted(labels_unique_t1w) == sorted(labels_unique):
+                    raise ValueError(f'Unique values are different between T1w and T2w for {labels_file}')
 
-            # Corresponding structure
-            label_struc = rev_old_mapping[val]
-            if not sub_acq.split('_')[0] in problem_tss_list:
-                tss_struc = rev_new_mapping[tss_val]
-            else:
-                if 'L6' in new_val_list and rev_spineps_mapping[spineps_val] == 'L5-S':
-                    tss_struc = 'L5-L6'
-                elif 'L6' in new_val_list and rev_spineps_mapping[spineps_val] == 'L6-S':
-                    tss_struc = 'L5-S'
+            # Loop over the values and find corresponding structures for spineps and totalspineseg
+            new_val_list = []
+            spineps_list = []
+            new_val_pos = []
+            tss_list = []
+            for val in labels_unique: # Loop starts from the bootm lumbar vertebrae
+                mask_struc = np.where(labels_image.data == val, 1, 0).astype(bool)
+                spineps_val = np.median(spineps_image.data[mask_struc]) # Because segmentations are good, dice > 0.5, the median is used
+                tss_val = np.median(tss_image.data[mask_struc])
+                z_pos = np.mean(np.where(labels_image.data == val)[2])
+
+                # Corresponding structure
+                label_struc = rev_old_mapping[val]
+                if not sub_acq.split('_')[0] in problem_tss_list:
+                    tss_struc = rev_new_mapping[tss_val]
                 else:
-                    tss_struc = rev_spineps_mapping[spineps_val]
-                
-            if sub_acq.split('_')[0] in problem_spineps_list: # Copy tss classes in problematic cases
-                spineps_struc = tss_struc
-            elif spineps_val == 0 and tss_val == 31 and sub_acq.split('_')[0] == 'sub-097':
-                spineps_struc = rev_spineps_mapping[19]
-            elif spineps_list and rev_spineps_mapping[spineps_val] == spineps_list[-1] and not '-' in rev_spineps_mapping[spineps_val]:
-                spineps_struc = rev_spineps_mapping[spineps_val-1]
-            else:
-                spineps_struc = rev_spineps_mapping[spineps_val]
-
-            if spineps_list and spineps_struc == "error": # Spineps errors only occurs on discs for now
-                prev_struc = spineps_list[-1]
-                upper_vert = prev_struc.split('-')[0]
-                if upper_vert == 'L1':
-                    spineps_struc = 'T12-L1'
-                else:
-                    spineps_struc = f'T{int(upper_vert.split('T')[-1])-1}-T{int(upper_vert.split('T')[-1])}'
-
-            if spineps_struc == tss_struc and not tss_struc in new_val_list:
-                if 'L6' in spineps_list and not 'L6' in tss_list and spineps_struc != 'sacrum' and not 'sacrum' in tss_list: # Deal with L6 + 11 thoracic spineps
-                    if not '-' in tss_struc: # Vertebrae
-                        struc = f'T{int(tss_struc.split('T')[-1])+1}'
-                    else: # Discs
-                        if tss_struc == 'T11-T12':
-                            struc = 'T12-L1'
-                        else:
-                            upper_vert = tss_struc.split('-')[0]
-                            struc = f'T{int(upper_vert.split('T')[-1])+1}-T{int(upper_vert.split('T')[-1])+2}'
-                    new_val = new_mapping[struc]
-                else:
-                    # Update segmentation value
-                    new_val = new_mapping[tss_struc]
-            else:
-                if spineps_struc == 'T13' and tss_struc == 'T12':
-                    new_val = new_mapping['T12']
-                elif 'T13' in spineps_list and not 'L6' in spineps_list and 'L5' in spineps_list:
-                    if spineps_struc == 'T12' and tss_struc == 'T11':
-                        new_val = new_mapping['T11']
-                    elif spineps_struc == 'T12-L1' and tss_struc == 'T11-T12': # T12-T13, T13-L1 and T12-L1 have same value for spineps 
-                        new_val = new_mapping['T11-T12']
+                    if 'L6' in new_val_list and rev_spineps_mapping[spineps_val] == 'L5-S':
+                        tss_struc = 'L5-L6'
+                    elif 'L6' in new_val_list and rev_spineps_mapping[spineps_val] == 'L6-S':
+                        tss_struc = 'L5-S'
                     else:
-                        if not '-' in tss_struc: # Vertebrae
-                            if tss_struc == f'T{int(spineps_struc.split('T')[-1])-1}':
-                                new_val = new_mapping[tss_struc]
-                            else:
-                                raise ValueError('New mismatch, please act')
-                        else:
-                            upper_vert = spineps_struc.split('-')[0]
-                            if f'T{int(upper_vert.split('T')[-1])-1}-T{int(upper_vert.split('T')[-1])}' == tss_struc:
-                                new_val = new_mapping[tss_struc]
-                            else:
-                                raise ValueError('New mismatch, please act')
-                elif spineps_struc.startswith('L'):
-                    if 'L5' not in new_val_list and 'L4' in new_val_list and spineps_struc == 'L4-L5': # Assign value 100 to last disc before sacrum when 4 lumbar
-                        new_val = new_mapping['L5-S']
-                    elif 'L6' in new_val_list and '-' in spineps_struc:
-                        if spineps_struc == 'L6-S':
-                            new_val = new_mapping['L5-S']
-                        elif spineps_struc == 'L5-S':
-                            new_val = new_mapping['L5-L6']
-                        else:
-                            new_val = new_mapping[spineps_struc]
+                        tss_struc = rev_spineps_mapping[spineps_val]
+                    
+                if sub_acq.split('_')[0] in problem_spineps_list: # Copy tss classes in problematic cases
+                    spineps_struc = tss_struc
+                elif spineps_val == 0 and tss_val == 31 and sub_acq.split('_')[0] == 'sub-097':
+                    spineps_struc = rev_spineps_mapping[19]
+                elif spineps_list and rev_spineps_mapping[spineps_val] == spineps_list[-1] and not '-' in rev_spineps_mapping[spineps_val]:
+                    spineps_struc = rev_spineps_mapping[spineps_val-1]
+                else:
+                    spineps_struc = rev_spineps_mapping[spineps_val]
+
+                if spineps_list and spineps_struc == "error": # Spineps errors only occurs on discs for now
+                    prev_struc = spineps_list[-1]
+                    upper_vert = prev_struc.split('-')[0]
+                    if upper_vert == 'L1':
+                        spineps_struc = 'T12-L1'
                     else:
-                        new_val = new_mapping[spineps_struc]
-                    if sub_acq not in updated_list:
-                        updated_list.append(sub_acq)
-                elif 'L6' in spineps_list:
-                    if spineps_struc == 'T13' and tss_struc == 'T11':
-                        new_val = new_mapping['T12']
-                    elif 'T13' in spineps_list:
+                        spineps_struc = f'T{int(upper_vert.split('T')[-1])-1}-T{int(upper_vert.split('T')[-1])}'
+
+                if spineps_struc == tss_struc and not tss_struc in new_val_list:
+                    if 'L6' in spineps_list and not 'L6' in tss_list and spineps_struc != 'sacrum' and not 'sacrum' in tss_list: # Deal with L6 + 11 thoracic spineps
                         if not '-' in tss_struc: # Vertebrae
-                            if f'T{int(spineps_struc.split('T')[-1])-2}' == tss_struc:
-                                new_val = new_mapping[f'T{int(spineps_struc.split('T')[-1])-1}']
-                            elif f'T{int(spineps_struc.split('T')[-1])-1}' == tss_struc:
-                                new_val = new_mapping[tss_struc]
-                            else:
-                                raise ValueError('New mismatch, please act')
+                            struc = f'T{int(tss_struc.split('T')[-1])+1}'
                         else: # Discs
-                            if spineps_struc == 'T12-L1' and tss_struc == 'T11-T12' and not 'L6' in tss_list:
-                                new_val = new_mapping[spineps_struc]
-                            elif spineps_struc == 'T12-L1' and tss_struc == 'T10-T11' and not 'L6' in tss_list:
-                                new_val = new_mapping['T11-T12']
-                            elif spineps_struc == 'T12-L1' and tss_struc == 'T11-T12' and 'L6' in tss_list:
-                                new_val = new_mapping['T11-T12']
+                            if tss_struc == 'T11-T12':
+                                struc = 'T12-L1'
                             else:
-                                upper_vert = spineps_struc.split('-')[0]
-                                if f'T{int(upper_vert.split('T')[-1])-2}-T{int(upper_vert.split('T')[-1])-1}' == tss_struc:
-                                    new_val = new_mapping[f'T{int(upper_vert.split('T')[-1])-1}-T{int(upper_vert.split('T')[-1])}']
-                                elif f'T{int(upper_vert.split('T')[-1])-1}-T{int(upper_vert.split('T')[-1])}' == tss_struc:
+                                upper_vert = tss_struc.split('-')[0]
+                                struc = f'T{int(upper_vert.split('T')[-1])+1}-T{int(upper_vert.split('T')[-1])+2}'
+                        new_val = new_mapping[struc]
+                    else:
+                        # Update segmentation value
+                        new_val = new_mapping[tss_struc]
+                else:
+                    if spineps_struc == 'T13' and tss_struc == 'T12':
+                        new_val = new_mapping['T12']
+                    elif 'T13' in spineps_list and not 'L6' in spineps_list and 'L5' in spineps_list:
+                        if spineps_struc == 'T12' and tss_struc == 'T11':
+                            new_val = new_mapping['T11']
+                        elif spineps_struc == 'T12-L1' and tss_struc == 'T11-T12': # T12-T13, T13-L1 and T12-L1 have same value for spineps 
+                            new_val = new_mapping['T11-T12']
+                        else:
+                            if not '-' in tss_struc: # Vertebrae
+                                if tss_struc == f'T{int(spineps_struc.split('T')[-1])-1}':
                                     new_val = new_mapping[tss_struc]
                                 else:
                                     raise ValueError('New mismatch, please act')
-                    else:
-                        if not '-' in tss_struc: # Vertebrae
-                            if f'T{int(spineps_struc.split('T')[-1])-1}' == tss_struc:
-                                new_val = new_mapping[spineps_struc]
-                            else:
-                                if 'T12' not in spineps_list: # Deal with spineps detecting patients with only 11 thoracic vertebrae
-                                    if f'T{int(tss_struc.split('T')[-1])-1}' == spineps_struc:
-                                        new_val = new_mapping[tss_struc]
-                                    else:
-                                        raise ValueError('New mismatch, please act')
-                                else:
-                                    raise ValueError('New mismatch, please act')
-                        else:
-                            if spineps_struc == 'T12-L1' and tss_struc == 'T11-T12':
-                                new_val = new_mapping[spineps_struc]
                             else:
                                 upper_vert = spineps_struc.split('-')[0]
                                 if f'T{int(upper_vert.split('T')[-1])-1}-T{int(upper_vert.split('T')[-1])}' == tss_struc:
+                                    new_val = new_mapping[tss_struc]
+                                else:
+                                    raise ValueError('New mismatch, please act')
+                    elif spineps_struc.startswith('L'):
+                        if 'L5' not in new_val_list and 'L4' in new_val_list and spineps_struc == 'L4-L5': # Assign value 100 to last disc before sacrum when 4 lumbar
+                            new_val = new_mapping['L5-S']
+                        elif 'L6' in new_val_list and '-' in spineps_struc:
+                            if spineps_struc == 'L6-S':
+                                new_val = new_mapping['L5-S']
+                            elif spineps_struc == 'L5-S':
+                                new_val = new_mapping['L5-L6']
+                            else:
+                                new_val = new_mapping[spineps_struc]
+                        else:
+                            new_val = new_mapping[spineps_struc]
+                        if sub_acq not in updated_list:
+                            updated_list.append(sub_acq)
+                    elif 'L6' in spineps_list:
+                        if spineps_struc == 'T13' and tss_struc == 'T11':
+                            new_val = new_mapping['T12']
+                        elif 'T13' in spineps_list:
+                            if not '-' in tss_struc: # Vertebrae
+                                if f'T{int(spineps_struc.split('T')[-1])-2}' == tss_struc:
+                                    new_val = new_mapping[f'T{int(spineps_struc.split('T')[-1])-1}']
+                                elif f'T{int(spineps_struc.split('T')[-1])-1}' == tss_struc:
+                                    new_val = new_mapping[tss_struc]
+                                else:
+                                    raise ValueError('New mismatch, please act')
+                            else: # Discs
+                                if spineps_struc == 'T12-L1' and tss_struc == 'T11-T12' and not 'L6' in tss_list:
+                                    new_val = new_mapping[spineps_struc]
+                                elif spineps_struc == 'T12-L1' and tss_struc == 'T10-T11' and not 'L6' in tss_list:
+                                    new_val = new_mapping['T11-T12']
+                                elif spineps_struc == 'T12-L1' and tss_struc == 'T11-T12' and 'L6' in tss_list:
+                                    new_val = new_mapping['T11-T12']
+                                else:
+                                    upper_vert = spineps_struc.split('-')[0]
+                                    if f'T{int(upper_vert.split('T')[-1])-2}-T{int(upper_vert.split('T')[-1])-1}' == tss_struc:
+                                        new_val = new_mapping[f'T{int(upper_vert.split('T')[-1])-1}-T{int(upper_vert.split('T')[-1])}']
+                                    elif f'T{int(upper_vert.split('T')[-1])-1}-T{int(upper_vert.split('T')[-1])}' == tss_struc:
+                                        new_val = new_mapping[tss_struc]
+                                    else:
+                                        raise ValueError('New mismatch, please act')
+                        else:
+                            if not '-' in tss_struc: # Vertebrae
+                                if f'T{int(spineps_struc.split('T')[-1])-1}' == tss_struc:
                                     new_val = new_mapping[spineps_struc]
                                 else:
                                     if 'T12' not in spineps_list: # Deal with spineps detecting patients with only 11 thoracic vertebrae
-                                        upper_vert = tss_struc.split('-')[0]
-                                        if spineps_struc == 'T11-T12' and tss_struc == 'T12-L1':
-                                            new_val = new_mapping[tss_struc]
-                                        elif f'T{int(upper_vert.split('T')[-1])-1}-T{int(upper_vert.split('T')[-1])}' == spineps_struc:
+                                        if f'T{int(tss_struc.split('T')[-1])-1}' == spineps_struc:
                                             new_val = new_mapping[tss_struc]
                                         else:
                                             raise ValueError('New mismatch, please act')
                                     else:
                                         raise ValueError('New mismatch, please act')
-                elif 'L5' not in new_val_list and 'L4' in new_val_list: # Deal with 4 lumbar vertebrae
-                    if sub_acq not in updated_list:
-                        raise ValueError(f'{sub_acq} should be in updated_list')
-                    if tss_struc == 'L1-L2' and (spineps_struc == 'T12-L1' or spineps_struc == 'T11-T12'):
-                        new_val = new_mapping['T12-L1']
-                    elif tss_struc == 'L1' and (spineps_struc == 'T11' or spineps_struc == 'T12' or spineps_struc == 'T13'):
-                        new_val = new_mapping['T12']
-                    elif 'T13' in spineps_list and spineps_struc == tss_struc and tss_struc in new_val_list:
-                        if not '-' in tss_struc: # Vertebrae
-                            struc = f'T{int(spineps_struc.split('T')[-1])-1}'
-                        else: # Discs
-                            upper_vert = spineps_struc.split('-')[0]
-                            struc = f'T{int(upper_vert.split('T')[-1])-1}-T{int(upper_vert.split('T')[-1])}'
-                        new_val = new_mapping[struc]
-                    elif 'T13' not in spineps_list:
-                        if not '-' in spineps_struc: # Vertebrae
-                            if f'T{int(tss_struc.split('T')[-1])-1}' == spineps_struc: 
-                                new_val = new_mapping[spineps_struc]
-                            elif f'T{int(tss_struc.split('T')[-1])-2}' == spineps_struc: # 11 thoracic
-                                new_val = new_mapping[f'T{int(tss_struc.split('T')[-1])-1}']
+                            else:
+                                if spineps_struc == 'T12-L1' and tss_struc == 'T11-T12':
+                                    new_val = new_mapping[spineps_struc]
+                                else:
+                                    upper_vert = spineps_struc.split('-')[0]
+                                    if f'T{int(upper_vert.split('T')[-1])-1}-T{int(upper_vert.split('T')[-1])}' == tss_struc:
+                                        new_val = new_mapping[spineps_struc]
+                                    else:
+                                        if 'T12' not in spineps_list: # Deal with spineps detecting patients with only 11 thoracic vertebrae
+                                            upper_vert = tss_struc.split('-')[0]
+                                            if spineps_struc == 'T11-T12' and tss_struc == 'T12-L1':
+                                                new_val = new_mapping[tss_struc]
+                                            elif f'T{int(upper_vert.split('T')[-1])-1}-T{int(upper_vert.split('T')[-1])}' == spineps_struc:
+                                                new_val = new_mapping[tss_struc]
+                                            else:
+                                                raise ValueError('New mismatch, please act')
+                                        else:
+                                            raise ValueError('New mismatch, please act')
+                    elif 'L5' not in new_val_list and 'L4' in new_val_list: # Deal with 4 lumbar vertebrae
+                        if sub_acq not in updated_list:
+                            raise ValueError(f'{sub_acq} should be in updated_list')
+                        if tss_struc == 'L1-L2' and (spineps_struc == 'T12-L1' or spineps_struc == 'T11-T12'):
+                            new_val = new_mapping['T12-L1']
+                        elif tss_struc == 'L1' and (spineps_struc == 'T11' or spineps_struc == 'T12' or spineps_struc == 'T13'):
+                            new_val = new_mapping['T12']
+                        elif 'T13' in spineps_list and spineps_struc == tss_struc and tss_struc in new_val_list:
+                            if not '-' in tss_struc: # Vertebrae
+                                struc = f'T{int(spineps_struc.split('T')[-1])-1}'
+                            else: # Discs
+                                upper_vert = spineps_struc.split('-')[0]
+                                struc = f'T{int(upper_vert.split('T')[-1])-1}-T{int(upper_vert.split('T')[-1])}'
+                            new_val = new_mapping[struc]
+                        elif 'T13' not in spineps_list:
+                            if not '-' in spineps_struc: # Vertebrae
+                                if f'T{int(tss_struc.split('T')[-1])-1}' == spineps_struc: 
+                                    new_val = new_mapping[spineps_struc]
+                                elif f'T{int(tss_struc.split('T')[-1])-2}' == spineps_struc: # 11 thoracic
+                                    new_val = new_mapping[f'T{int(tss_struc.split('T')[-1])-1}']
+                                else:
+                                    raise ValueError('New mismatch, please act')
+                            else: # Discs
+                                upper_vert = tss_struc.split('-')[0]
+                                if f'T{int(upper_vert.split('T')[-1])-1}-T{int(upper_vert.split('T')[-1])}' == spineps_struc:
+                                    new_val = new_mapping[spineps_struc]
+                                elif f'T{int(upper_vert.split('T')[-1])-2}-T{int(upper_vert.split('T')[-1])-1}' == spineps_struc: # 11 thoracic
+                                    new_val = new_mapping[f'T{int(upper_vert.split('T')[-1])-1}-T{int(upper_vert.split('T')[-1])}']
+                                else:
+                                    raise ValueError('New mismatch, please act')
+                        else:
+                            raise ValueError('New mismatch, please act')
+                    elif spineps_struc in new_val_list and tss_struc not in new_val_list and f'T{int(spineps_struc.split('T')[-1])-1}' == tss_struc: # Deal with spineps detecting multiple time the same vertebrae
+                        new_val = new_mapping[tss_struc]
+                    elif 'L6' in tss_list and 'L6' not in spineps_list:
+                        new_val = new_mapping[spineps_struc]
+                    elif 'T12' not in spineps_list: # Deal with spineps detecting patients with only 11 thoracic vertebrae
+                        if not '-' in spineps_struc: # vertebrae
+                            if f'T{int(tss_struc.split('T')[-1])-1}' == spineps_struc:
+                                new_val = new_mapping[tss_struc]
                             else:
                                 raise ValueError('New mismatch, please act')
-                        else: # Discs
+                        else:
                             upper_vert = tss_struc.split('-')[0]
-                            if f'T{int(upper_vert.split('T')[-1])-1}-T{int(upper_vert.split('T')[-1])}' == spineps_struc:
-                                new_val = new_mapping[spineps_struc]
-                            elif f'T{int(upper_vert.split('T')[-1])-2}-T{int(upper_vert.split('T')[-1])-1}' == spineps_struc: # 11 thoracic
-                                new_val = new_mapping[f'T{int(upper_vert.split('T')[-1])-1}-T{int(upper_vert.split('T')[-1])}']
+                            if spineps_struc == 'T11-T12' and tss_struc == 'T12-L1':
+                                new_val = new_mapping[tss_struc]
+                            elif f'T{int(upper_vert.split('T')[-1])-1}-T{int(upper_vert.split('T')[-1])}' == spineps_struc:
+                                new_val = new_mapping[tss_struc]
                             else:
                                 raise ValueError('New mismatch, please act')
-                    else:
-                        raise ValueError('New mismatch, please act')
-                elif spineps_struc in new_val_list and tss_struc not in new_val_list and f'T{int(spineps_struc.split('T')[-1])-1}' == tss_struc: # Deal with spineps detecting multiple time the same vertebrae
-                    new_val = new_mapping[tss_struc]
-                elif 'L6' in tss_list and 'L6' not in spineps_list:
-                    new_val = new_mapping[spineps_struc]
-                elif 'T12' not in spineps_list: # Deal with spineps detecting patients with only 11 thoracic vertebrae
-                    if not '-' in spineps_struc: # vertebrae
-                        if f'T{int(tss_struc.split('T')[-1])-1}' == spineps_struc:
-                            new_val = new_mapping[tss_struc]
-                        else:
-                            raise ValueError('New mismatch, please act')
-                    else:
-                        upper_vert = tss_struc.split('-')[0]
-                        if spineps_struc == 'T11-T12' and tss_struc == 'T12-L1':
-                            new_val = new_mapping[tss_struc]
-                        elif f'T{int(upper_vert.split('T')[-1])-1}-T{int(upper_vert.split('T')[-1])}' == spineps_struc:
-                            new_val = new_mapping[tss_struc]
-                        else:
-                            raise ValueError('New mismatch, please act')
-                elif spineps_struc == "error":
-                    new_val = new_mapping[tss_struc]
-                else:
-                    if spineps_struc == tss_struc and sub_acq.split('_')[0] in problem_seg_list:
+                    elif spineps_struc == "error":
                         new_val = new_mapping[tss_struc]
                     else:
-                        raise ValueError('New mismatch, please act')
-            
-            # Check if val not already assigned
-            if rev_new_mapping[new_val] in new_val_list and sub_acq.split('_')[0] not in problem_seg_list:
-                raise ValueError(f'Val {rev_new_mapping[new_val]} was already assigned !')
-            elif rev_new_mapping[new_val] in new_val_list and sub_acq.split('_')[0] in problem_seg_list:
-                pass
-            else:
-                new_val_list.append(rev_new_mapping[new_val])
-                new_val_pos.append(z_pos)
-                spineps_list.append(spineps_struc)
-                tss_list.append(tss_struc)
-            
-            labels_image.data[mask_struc] = new_val
-            if not labels_image_t1w is None:
-                labels_image_t1w.data[np.where(labels_image_t1w.data == val)] = new_val
+                        if spineps_struc == tss_struc and sub_acq.split('_')[0] in problem_seg_list:
+                            new_val = new_mapping[tss_struc]
+                        else:
+                            raise ValueError('New mismatch, please act')
                 
-        # Save segmentations with new labels in output folder
-        out_file = labels_file.replace(labels_folder, output_folder)
-        if not os.path.exists(os.path.dirname(out_file)):
-            os.makedirs(os.path.dirname(out_file))
-        labels_image.save(out_file)
-        shutil.copy(labels_file.replace('.nii.gz', '.json'), out_file.replace('.nii.gz', '.json'))
-        update_json_file(out_file.replace('.nii.gz', '.json'))
+                # Check if val not already assigned
+                if rev_new_mapping[new_val] in new_val_list and sub_acq.split('_')[0] not in problem_seg_list:
+                    raise ValueError(f'Val {rev_new_mapping[new_val]} was already assigned !')
+                elif rev_new_mapping[new_val] in new_val_list and sub_acq.split('_')[0] in problem_seg_list:
+                    pass
+                else:
+                    new_val_list.append(rev_new_mapping[new_val])
+                    new_val_pos.append(z_pos)
+                    spineps_list.append(spineps_struc)
+                    tss_list.append(tss_struc)
+                
+                labels_image.data[mask_struc] = new_val
+                if not labels_image_t1w is None:
+                    labels_image_t1w.data[np.where(labels_image_t1w.data == val)] = new_val
+                    
+            # Save segmentations with new labels in output folder
+            out_file = labels_file.replace(labels_folder, output_folder)
+            if not os.path.exists(os.path.dirname(out_file)):
+                os.makedirs(os.path.dirname(out_file))
+            labels_image.save(out_file)
+            shutil.copy(labels_file.replace('.nii.gz', '.json'), out_file.replace('.nii.gz', '.json'))
+            update_json_file(out_file.replace('.nii.gz', '.json'))
 
-        with open(f'{output_folder}/check.txt', 'a') as f:
-            name = sub_acq if not 'lowresSag' in sub_acq else f'{sub_acq} '
-            f.write(f"{name} : " + " ".join([new_val_list[i] for i in np.argsort(new_val_pos)]) + "\n")
-        
-        if new_val_list != tss_list:
-            with open(f'{output_folder}/new.txt', 'a') as f:
+            with open(f'{output_folder}/check.txt', 'a') as f:
                 name = sub_acq if not 'lowresSag' in sub_acq else f'{sub_acq} '
-                f.write(f"{name}\n")
+                f.write(f"{name} : " + " ".join([new_val_list[i] for i in np.argsort(new_val_pos)]) + "\n")
+            
+            if new_val_list != tss_list:
+                with open(f'{output_folder}/new.txt', 'a') as f:
+                    name = sub_acq if not 'lowresSag' in sub_acq else f'{sub_acq} '
+                    f.write(f"{name}\n")
 
-        if not labels_image_t1w is None:
-            out_file_t1w = labels_file_t1w.replace(labels_folder, output_folder)
-            if not os.path.exists(os.path.dirname(out_file_t1w)):
-                os.makedirs(os.path.dirname(out_file_t1w))
-            labels_image_t1w.save(out_file_t1w)
-            shutil.copy(labels_file_t1w.replace('.nii.gz', '.json'), out_file_t1w.replace('.nii.gz', '.json'))
-            update_json_file(out_file_t1w.replace('.nii.gz', '.json'))
+            if not labels_image_t1w is None:
+                out_file_t1w = labels_file_t1w.replace(labels_folder, output_folder)
+                if not os.path.exists(os.path.dirname(out_file_t1w)):
+                    os.makedirs(os.path.dirname(out_file_t1w))
+                labels_image_t1w.save(out_file_t1w)
+                shutil.copy(labels_file_t1w.replace('.nii.gz', '.json'), out_file_t1w.replace('.nii.gz', '.json'))
+                update_json_file(out_file_t1w.replace('.nii.gz', '.json'))
         
 
                 
