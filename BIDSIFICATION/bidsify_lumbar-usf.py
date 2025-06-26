@@ -203,90 +203,31 @@ def main():
     
     # Initialize dict for participants.tsv
     sub_dict_tsv = dict()
-    
-    # List excluded data
-    exclude = []
-    for dir in os.listdir(path_dataset):
-        path_input = os.path.join(path_dataset, dir)
-        if os.path.isdir(path_input):
-            num = dir.replace('Anonym_Patient', '')
-            subject_name_bids = f"sub-{num}"
-            sub_files = []
-            for file in os.listdir(path_input):
-                if file.endswith('.nii.gz'):
-                    if not '_ROI' in file:
-                        sub_files.append(file)
-                        # Add subject name to participant.tsv 
-                        if subject_name_bids not in sub_dict_tsv.keys(): # Add only one time each subject into the participant.csv
-                            # Aggregate subjects for participants.tsv
-                            sub_dict_tsv[subject_name_bids] = dir
+    for file in os.listdir(path_dataset):
+        path_input = os.path.join(path_dataset, file)
+        old_filename = os.path.basename(path_input)
+        old_name = old_filename.split('_')[0]
+        bids_filename = old_filename.replace('RESTORE','').replace('_ses-A','')
+        subject_name_bids = bids_filename.split('_')[0]
+        
+        # Add subject name to participant.tsv 
+        if subject_name_bids not in sub_dict_tsv.keys(): # Add only one time each subject into the participant.csv
+            # Aggregate subjects for participants.tsv
+            sub_dict_tsv[subject_name_bids] = old_name
 
-                        # Path input image
-                        path_file_in = os.path.join(path_input, file)
+        # Path input image
+        path_file_in = os.path.join(path_input)
+        
+        # Load image and reorient
+        img = Image(path_file_in).change_orientation('RPI')
+        
+        # Construct path for the output IMAGE
+        path_subject_folder_out = os.path.join(path_output, subject_name_bids, 'anat')
+        create_subject_folder_if_not_exists(path_subject_folder_out)
 
-                        # Fetch image acquisition type
-                        acq_entity = ''
-                        chunk_entity = ''
-                        if '_sag_' in file or '_SAG_' in file or '_Sag_' in file or '-SAG_' in file:
-                            acq_entity = 'acq-sag'
-                        elif '_tra_' in file or '_AX_' in file or '_ax_' in file or '_Ax_' in file or '_TRA_' in file:
-                            acq_entity = 'acq-ax'
-                            if file.split('_')[-1].startswith('i0'):
-                                chunk_num = file.split('_i')[-1].split('.')[0]
-                            else:
-                                chunk_num = '00001'
-                            chunk_entity = f'chunk-{chunk_num}'
-                        
-                        if not acq_entity and file.split('_')[-1].startswith('i0'):
-                            chunk_num = file.split('_i')[-1].split('.')[0]
-                            chunk_entity = f'chunk-{chunk_num}'
-                            acq_entity = 'acq-ax'
-
-                        # Fetch contrast
-                        cont = ''
-                        if '_t1_' in file or '_T1_' in file or '_T1W_' in file or '_eT1_' in file:
-                            cont = 'T1w'
-                        elif '_t2_' in file or '_T2_' in file or '_T2W_' in file or '_T2-' in file or '_sT2W_' in file or '_eT2_' in file or '_eT2W_' in file:
-                            cont = 'T2w'
-                        
-                        # Load image and reorient
-                        img = Image(path_file_in).change_orientation('RPI')
-
-                        # If no acq_entity check resolution
-                        if not acq_entity:
-                            x, y, z, t, xr, yr, zr, tr = img.dim
-                            if xr > 5*yr and xr > 5*zr: # Higher R-L pixdim --> lower sagittal resolution, probably saggital
-                                acq_entity = 'acq-sag'
-                        
-                        # Check acq entity and contrast
-                        if not acq_entity:
-                            raise ValueError(f'Missing acq entity with filename: {file}')
-                        if not cont:
-                            raise ValueError(f'Missing contrast with filename: {file}')
-                        
-                        # Create image filename
-                        if acq_entity == 'acq-ax':
-                            img_filename = "_".join([subject_name_bids, acq_entity, chunk_entity, cont])
-                        else:
-                            img_filename = "_".join([subject_name_bids, acq_entity, cont])
-                        
-                        # Construct path for the output IMAGE
-                        path_subject_folder_out = os.path.join(path_output, subject_name_bids, 'anat')
-                        create_subject_folder_if_not_exists(path_subject_folder_out)
-                        filename_out = img_filename + '.nii.gz'
-                        path_file_out = os.path.join(path_subject_folder_out, filename_out)
-
-                        # Check if multiple files are projected onto the same output file
-                        if os.path.exists(path_file_out):
-                            raise ValueError(f'Multiple files have the same name for subject {dir}: see {path_file_out}')
-
-                        # Save file nifti
-                        img.save(path_file_out)
-
-                        # Copy JSON 
-                        copy(path_file_in.replace('.nii.gz', '.json'), path_file_out.replace('.nii.gz', '.json'))
-                    else:
-                        exclude.append(file)
+        # Save file nifti
+        path_file_out = os.path.join(path_output, subject_name_bids, 'anat', bids_filename)
+        img.save(path_file_out)
     
     participants_tsv_list = list(sub_dict_tsv.items())                 
 
