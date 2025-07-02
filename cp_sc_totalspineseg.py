@@ -32,9 +32,9 @@ def create_json_file(path_json_out):
 
 
 def main():
-    folder_path = '/home/GRAMES.POLYMTL.CA/p118739/data/datasets/article-totalspineseg/violin-plots/out/step1_cord'
-    out_folder = '/home/GRAMES.POLYMTL.CA/p118739/data/datasets/lumbar-vanderbilt/derivatives/labels'
-    img_folder = '/home/GRAMES.POLYMTL.CA/p118739/data/datasets/lumbar-vanderbilt'
+    folder_path = '/home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/data/romane_datasets/article-totalspineseg/violin-plots/out/step1_cord'
+    out_folder = '/home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/data/romane_datasets/lumbar-vanderbilt/derivatives/labels'
+    img_folder = '/home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/data/romane_datasets/lumbar-vanderbilt'
 
     for file_name in os.listdir(folder_path):
         path = os.path.join(folder_path,file_name)
@@ -61,7 +61,7 @@ def main():
                                 '-i', img_path,
                                 '-s', out_path,
                                 '-p', 'sct_deepseg_sc',
-                                '-qc', os.path.join('/home/GRAMES.POLYMTL.CA/p118739/data/datasets/lumbar-vanderbilt', 'qc')])
+                                '-qc', os.path.join('/home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/data/romane_datasets/lumbar-vanderbilt', 'qc')])
 
 if __name__=='__main__':
     main()
