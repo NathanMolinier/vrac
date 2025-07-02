@@ -43,13 +43,22 @@ def main():
                 raise ValueError(f'The git annex repository {rep_path} is missing. Use the flag --clone-repos to clone automatically.')
     
     # GET or DROP paths
+    missing_files = []
     command = 'get' if not args.drop else 'drop'
     for path in paths_to_process:
         rep_path = path.split('/derivatives')[0].split('/sub')[0] # Fetch repository path
         rel_path = path.split(rep_path + '/')[-1] # Fetch relative path
-        subprocess.check_call([
-                'git', '-C', rep_path, 'annex', command, rel_path
-            ])
+        if os.path.exists(path):
+            subprocess.check_call([
+                    'git', '-C', rep_path, 'annex', command, rel_path
+                ])
+        else:
+            missing_files.append(path)
+    
+    # Print missing files
+    if missing_files:
+        raise ValueError("missing files:\n" + '\n'.join(sorted(missing_files)))
+
 
 def fetch_all_paths_from_config(config, splits=['TRAINING', 'TESTING', 'VALIDATION']):
     all_paths = []
