@@ -29,6 +29,10 @@ import torch
 from transforms.transforms import ConvTransform, HistogramEqualTransform, FunctionTransform, ImageFromSegTransform, RedistributeTransform, ArtifactTransform, SpatialCustomTransform, ShapeTransform
 
 class nnUNetTrainerDAExt(nnUNetTrainer):
+    def __init__(self, plans: dict, configuration: str, fold: int, dataset_json: dict,
+                 device: torch.device = torch.device('cuda')):
+        super().__init__(plans, configuration, fold, dataset_json, device)
+        self.save_every = 10
     
     @staticmethod
     def get_training_transforms(
@@ -274,13 +278,12 @@ if __name__=='__main__':
     from vrac.data_management.image import Image
     from vrac.utils.utils import normalize
 
-    plans = load_json('/home/GRAMES.POLYMTL.CA/p118739/data/nnUNet_preprocessed/Dataset348_DiscsVertebrae/nnUNetPlans.json')
+    plans = load_json('/home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/data/totalspineseg_data/nnUNet/results/r20241115/Dataset101_TotalSpineSeg_step1/nnUNetTrainer_DASegOrd0_NoMirroring__nnUNetPlans_small__3d_fullres/plans.json')
     configuration = '3d_fullres'
     fold = 0
-    dataset_json = load_json('/home/GRAMES.POLYMTL.CA/p118739/data/nnUNet_preprocessed/Dataset348_DiscsVertebrae/dataset.json')
+    dataset_json = load_json('/home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/data/totalspineseg_data/nnUNet/results/r20241115/Dataset101_TotalSpineSeg_step1/nnUNetTrainer_DASegOrd0_NoMirroring__nnUNetPlans_small__3d_fullres/dataset.json')
     device = torch.device('cpu')
-    unpack_dataset = True
-    trainer = nnUNetTrainerDAExt(plans, configuration, fold, dataset_json, unpack_dataset, device)
+    trainer = nnUNetTrainerDAExt(plans, configuration, fold, dataset_json, device)
     
     rotation_for_DA, do_dummy_2d_data_aug, initial_patch_size, mirror_axes = trainer.configure_rotation_dummyDA_mirroring_and_inital_patch_size()
     
@@ -301,11 +304,11 @@ if __name__=='__main__':
     )
 
     # Load image
-    img_path = '/home/GRAMES.POLYMTL.CA/p118739/data/nnUNet_raw/Dataset348_DiscsVertebrae/imagesTr/sub-WHOLEamuFR_T1w_0000.nii.gz'
+    img_path = '/home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/data/romane_tss_data/nnUNet/raw/Dataset101_TotalSpineSeg_step1/imagesTr/sub-amuFR_T2w_0000.nii.gz'
     img = Image(img_path).change_orientation('RSP')
     img_tensor = torch.from_numpy(img.data.copy()).unsqueeze(0).to(torch.float32)
 
-    seg_path = '/home/GRAMES.POLYMTL.CA/p118739/data/nnUNet_raw/Dataset348_DiscsVertebrae/labelsTr/sub-WHOLEamuFR_T1w.nii.gz'
+    seg_path = '/home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/data/romane_tss_data/nnUNet/raw/Dataset101_TotalSpineSeg_step1/labelsTr/sub-amuFR_T2w.nii.gz'
     seg = Image(seg_path).change_orientation('RSP')
     seg_tensor = torch.from_numpy(seg.data.copy()).unsqueeze(0)
 
