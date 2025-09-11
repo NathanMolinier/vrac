@@ -68,6 +68,11 @@ def main(img_folder, pred_folder, output_folder):
                 canal_seg.data[np.isin(seg.data, [1,2])] = 1
                 spine_seg.data[np.isin(seg.data, [1,2])] = 0
 
+                if 11 in seg.data:
+                    # Crop canal at min C1
+                    min_c1 = np.min(np.nonzero((seg.data == 11))[2])
+                    canal_seg.data[:, :, min_c1:] = 0
+
                 # Init path out
                 output_path_canal = os.path.join(output_folder, 'derivatives/labels', subj, "anat", f'{subj}_{contrast}_label-canal_seg.nii.gz')
                 output_path_spine = os.path.join(output_folder, 'derivatives/labels', subj, "anat", f'{subj}_{contrast}_label-spine_dseg.nii.gz')
