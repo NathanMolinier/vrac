@@ -84,6 +84,9 @@ def main(img_folder, pred_folder, output_folder):
                         if 'Author' in dic.keys():
                             if dic['Author'] == 'Abel Salmona':
                                 skip = True
+                        if 'Author' in dic.keys():
+                            if dic['Author'] == 'Sandrine Bedard':
+                                skip = True
                         if 'Name' in dic.keys():
                             if 'spinalcordtoolbox: sct_deepseg sc_canal_t2' in dic['Name']:
                                 skip = True
