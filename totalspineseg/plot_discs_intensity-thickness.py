@@ -84,7 +84,7 @@ def main():
         intensity_array = np.array(intensity_dict[name])
         if len(thickness_array) > 0:
             median_thickness = np.median(thickness_array[intensity_array>0.1])
-            thickness_dict[name] = (thickness_array - median_thickness) / median_thickness
+            thickness_dict[name] = thickness_array / median_thickness
         else:
             thickness_dict[name] = thickness_array
     
@@ -96,11 +96,11 @@ def main():
         thickness_array = np.array(thickness_dict[name])
         intensity_array = np.array(intensity_dict[name])
         for thickness, intensity in zip(thickness_array, intensity_array):
-            if thickness < -0.6:
+            if thickness < 0.3:
                 grades_dict[name].append(8)
-            elif thickness < -0.3:
+            elif thickness < 0.6:
                 grades_dict[name].append(7)
-            elif thickness < -0.1:
+            elif thickness < 0.9:
                 grades_dict[name].append(6)
             elif intensity < 0.1:
                 grades_dict[name].append(5)
@@ -147,7 +147,7 @@ def main():
     plt.xlabel('Thickness')
     plt.ylabel('Intensity')
     plt.ylim(0, 2.0)
-    plt.xlim(-1, 1)
+    plt.xlim(0, 2)
     plt.title('Disc Intensity vs Thickness (All Discs)')
     plt.legend()
     if not os.path.exists('imgs'):
@@ -159,11 +159,13 @@ def main():
         grades_list = np.array(grades_dict[name])
         imgs = img_dict[name]
         segs = seg_dict[name]
+        thicknesses = np.array(thickness_dict[name])
+        intensities = np.array(intensity_dict[name])
         # Combine image and segmentation side by side for each example
         combined_imgs = [np.concatenate((img, seg), axis=1) for img, seg in zip(imgs, segs)]
         imgs = combined_imgs
         unique_grades = np.unique(grades_list)
-        if grades_list.size>0:
+        if grades_list.size > 0:
             n_grades = len(unique_grades)
             n_examples = 5
 
@@ -179,14 +181,18 @@ def main():
                     ax.axis('off')
                     if j < len(idxs):
                         img = imgs[idxs[j]]
+                        thickness_val = thicknesses[idxs[j]]
+                        intensity_val = intensities[idxs[j]]
                         ax.imshow(img, cmap='gray')
                         if grade == 0:
-                            ax.set_title(f'Grade error', fontsize=25)
+                            title = f'Grade error'
                         else:
-                            ax.set_title(f'Grade {grade}', fontsize=25)
+                            title = f'Grade {grade}'
+                        # Display thickness and intensity values
+                        ax.set_title(f'{title}\nT={thickness_val:.2f}, I={intensity_val:.2f}', fontsize=16)
                     else:
                         ax.set_visible(False)
-            plt.suptitle(f'Examples for disc {name}', fontsize=40)
+            plt.suptitle(f'Examples for disc {name}', fontsize=32)
             plt.tight_layout(rect=[0, 0.03, 1, 0.95])
             plt.savefig(f'imgs/disc_{name}_examples_by_grade.png')
             plt.close()
