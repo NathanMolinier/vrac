@@ -17,7 +17,7 @@ def main():
         if os.path.exists(csv_folder):
             discs_data = pd.read_csv(os.path.join(csv_folder, "discs.csv"))
             vertebrae_data = pd.read_csv(os.path.join(csv_folder, "vertebrae.csv"))
-            for name, intensity_counts, intensity_bins, thickness in zip(discs_data.name, discs_data.intensity_counts, discs_data.intensity_bins, discs_data.median_thickness):
+            for name, intensity_peaks_gap, thickness in zip(discs_data.name, discs_data.intensity_peaks_gap, discs_data.median_thickness):
                 if name not in intensity_dict:
                     intensity_dict[name] = []
                     thickness_dict[name] = []
@@ -26,17 +26,6 @@ def main():
                 # Add image
                 img_dict[name].append(np.rot90(plt.imread(os.path.join(discs_imgs, f'discs_{name}_img.png'))))
                 seg_dict[name].append(np.rot90(plt.imread(os.path.join(discs_imgs, f'discs_{name}_seg.png'))))
-                intensity_counts = np.array(convert_str_to_list(intensity_counts))
-                intensity_bins = np.array(convert_str_to_list(intensity_bins))
-                bin_centers = (intensity_bins[:-1] + intensity_bins[1:]) / 2
-                # Find peaks
-                # `height` sets a minimum peak height
-                # `distance` controls how far apart peaks must be
-                peaks, properties = find_peaks(np.concatenate((np.zeros(5,), intensity_counts)), height=10, distance=2, prominence=5)
-                peaks = peaks - 5  # Adjust for padding
-                # Extract coordinates
-                peak_x = bin_centers[peaks]
-                peak_y = intensity_counts[peaks]
 
                 # Find in dataframe overlying_vert in name
                 overlying_vert = name.split('-')[0]
@@ -44,25 +33,8 @@ def main():
                 if not matching_rows.empty:
                     ap_thickness = float(vertebrae_data[vertebrae_data['name'] == overlying_vert]['AP_thickness'].iloc[0])
                     thickness_dict[name].append(thickness/ap_thickness)
-                    if len(peak_x) == 2:
-                        # Take the distance between the two peaks
-                        intensity_dict[name].append(peak_x[-1]-peak_x[0])
-                    elif len(peak_x) == 1:
-                        intensity_dict[name].append(0)
-                    else:
-                        count = 1
-                        while len(peak_x) > 2 and count < 50:
-                            # Smooth the intensity counts with a moving average
-                            peaks, properties = find_peaks(np.concatenate((np.zeros(5,), np.convolve(intensity_counts, np.ones(count)/count, mode='same'))), height=10, distance=2, prominence=5)
-                            peaks = peaks - 5  # Adjust for padding
-                            peak_x = bin_centers[peaks]
-                            count += 2
-                        if len(peak_x) == 2:
-                            intensity_dict[name].append(peak_x[-1]-peak_x[0])
-                        elif len(peak_x) == 1:
-                            intensity_dict[name].append(0)
-                        else:
-                            raise ValueError(f"Could not find exactly two peaks for {name} in {sub}, found {len(peak_x)} peaks even after smoothing.")
+                    intensity_dict[name].append(intensity_peaks_gap)
+
     # Generate subplots
     # for name in intensity_dict:
     #     # Fit a curve to the data
@@ -83,7 +55,7 @@ def main():
         thickness_array = np.array(thickness_dict[name])
         intensity_array = np.array(intensity_dict[name])
         if len(thickness_array) > 0:
-            median_thickness = np.median(thickness_array[intensity_array>0.1])
+            median_thickness = np.median(thickness_array[intensity_array>0.8])
             thickness_dict[name] = thickness_array / median_thickness
         else:
             thickness_dict[name] = thickness_array
@@ -96,25 +68,24 @@ def main():
         thickness_array = np.array(thickness_dict[name])
         intensity_array = np.array(intensity_dict[name])
         for thickness, intensity in zip(thickness_array, intensity_array):
-            if thickness < 0.3:
+            if thickness < 0.3 and intensity < 0.2:
                 grades_dict[name].append(8)
-            elif thickness < 0.6:
+            elif thickness < 0.6 and intensity < 0.2:
                 grades_dict[name].append(7)
-            elif thickness < 0.9:
+            elif thickness < 0.9 and intensity < 0.2:
                 grades_dict[name].append(6)
-            elif intensity < 0.1:
+            elif intensity < 0.1 and thickness >= 0.9:
                 grades_dict[name].append(5)
-            elif intensity < 0.3:
+            elif intensity < 0.3 and thickness >= 0.9:
                 grades_dict[name].append(4)
-            elif intensity < 0.6:
+            elif intensity < 0.6 and thickness >= 0.9:
                 grades_dict[name].append(3)
-            elif intensity < 0.9:
+            elif intensity < 0.9 and thickness >= 0.9:
                 grades_dict[name].append(2)
-            elif intensity >= 0.9:
+            elif intensity >= 0.9 and thickness >= 0.9:
                 grades_dict[name].append(1)
             else:
-                raise ValueError(f"Could not grade disc {name} with thickness {thickness} and intensity {intensity}.")
-
+                grades_dict[name].append(0) # error
     # x_line = np.linspace(-1, 1, 200)
     # grades = {}
     # for i in range(0, 8):
