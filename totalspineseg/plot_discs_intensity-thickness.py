@@ -12,6 +12,8 @@ def main():
     
     thickness_dict = {}
     intensity_dict = {}
+    solidity_dict = {}
+    eccentricity_dict = {}
     img_dict = {}
     seg_dict = {}
     gt_dict = {}
@@ -40,9 +42,12 @@ def main():
             else:
                 raise ValueError(f"L5-S not in discs for subject {sub}")
 
+            for name, intensity_peaks_gap, thickness, solidity, eccentricity in zip(discs_data.name, discs_data.intensity_peaks_gap, discs_data.median_thickness, discs_data.solidity, discs_data.eccentricity):
                 if name not in intensity_dict:
                     intensity_dict[name] = []
                     thickness_dict[name] = []
+                    solidity_dict[name] = []
+                    eccentricity_dict[name] = []
                     img_dict[name] = []
                     seg_dict[name] = []
                     gt_dict[name] = []
@@ -55,6 +60,11 @@ def main():
                     ap_thickness = float(vertebrae_data[vertebrae_data['name'] == overlying_vert]['AP_thickness'].iloc[0])
                     thickness_dict[name].append(thickness/ap_thickness)
                     intensity_dict[name].append(intensity_peaks_gap)
+
+                    # Add solidity and eccentricity
+                    solidity_dict[name].append(solidity)
+                    eccentricity_dict[name].append(eccentricity)
+
                     # Extract gt grading
                     gt_grading = sub_grading['Pfirrman grade'][label_discs_mapping[name] == sub_grading['IVD label']].iloc[0]
                     gt_dict[name].append(gt_grading)
@@ -62,6 +72,8 @@ def main():
                     # Add image
                     img_dict[name].append(np.rot90(plt.imread(os.path.join(discs_imgs, f'discs_{name}_img.png'))))
                     seg_dict[name].append(np.rot90(plt.imread(os.path.join(discs_imgs, f'discs_{name}_seg.png'))))
+
+
     # Generate subplots
     # for name in intensity_dict:
     #     # Fit a curve to the data
