@@ -82,7 +82,7 @@ def main():
         thickness_array = np.array(thickness_dict[name])
         intensity_array = np.array(intensity_dict[name])
         if len(thickness_array) > 0:
-            median_thickness = np.median(thickness_array[intensity_array>0.8])
+            median_thickness = np.median(thickness_array[intensity_array>0.6])
             thickness_dict[name] = thickness_array / median_thickness
         else:
             thickness_dict[name] = thickness_array
@@ -95,11 +95,11 @@ def main():
         thickness_array = np.array(thickness_dict[name])
         intensity_array = np.array(intensity_dict[name])
         for thickness, intensity in zip(thickness_array, intensity_array):
-            if thickness < 0.3 and intensity < 0.2:
+            if thickness < 0.3 and intensity < 0.3:
                 grades_dict[name].append(8)
-            elif thickness < 0.6 and intensity < 0.2:
+            elif thickness < 0.6 and intensity < 0.3:
                 grades_dict[name].append(7)
-            elif thickness < 0.9 and intensity < 0.2:
+            elif thickness < 0.9 and intensity < 0.3:
                 grades_dict[name].append(6)
             elif intensity < 0.1 and thickness >= 0.9:
                 grades_dict[name].append(5)
