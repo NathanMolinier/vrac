@@ -23,9 +23,7 @@ def main():
                     thickness_dict[name] = []
                     img_dict[name] = []
                     seg_dict[name] = []
-                # Add image
-                img_dict[name].append(np.rot90(plt.imread(os.path.join(discs_imgs, f'discs_{name}_img.png'))))
-                seg_dict[name].append(np.rot90(plt.imread(os.path.join(discs_imgs, f'discs_{name}_seg.png'))))
+                    gt_dict[name] = []
 
                 # Find in dataframe overlying_vert in name
                 overlying_vert = name.split('-')[0]
@@ -35,6 +33,9 @@ def main():
                     thickness_dict[name].append(thickness/ap_thickness)
                     intensity_dict[name].append(intensity_peaks_gap)
 
+                    # Add image
+                    img_dict[name].append(np.rot90(plt.imread(os.path.join(discs_imgs, f'discs_{name}_img.png'))))
+                    seg_dict[name].append(np.rot90(plt.imread(os.path.join(discs_imgs, f'discs_{name}_seg.png'))))
     # Generate subplots
     # for name in intensity_dict:
     #     # Fit a curve to the data
