@@ -6,18 +6,40 @@ from scipy.signal import find_peaks
 
 def main():
     folder_path = '/home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/data/datasets/test-tss/spider_output/metrics_output'
+    grading_gt_path = '/home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/data/datasets/spider-challenge-2023/radiological_gradings.csv'
+    
+    grading_gt = pd.read_csv(grading_gt_path)
     
     thickness_dict = {}
     intensity_dict = {}
     img_dict = {}
     seg_dict = {}
+    gt_dict = {}
+    label_discs_mapping ={
+        "T8-T9": 10,
+        "T9-T10": 9,
+        "T10-T11": 8,
+        "T11-T12": 7,
+        "T12-L1": 6,
+        "L1-L2": 5,
+        "L2-L3": 4,
+        "L3-L4": 3,
+        "L4-L5": 2,
+        "L5-S": 1
+    }
     for sub in os.listdir(folder_path):
         csv_folder = os.path.join(folder_path, sub, "csv")
         discs_imgs = os.path.join(folder_path, sub, "imgs")
+        sub_idx = int(sub.split('_')[0].split('-')[-1])
+        sub_grading = grading_gt[grading_gt['Patient'] == sub_idx]
         if os.path.exists(csv_folder):
             discs_data = pd.read_csv(os.path.join(csv_folder, "discs.csv"))
             vertebrae_data = pd.read_csv(os.path.join(csv_folder, "vertebrae.csv"))
-            for name, intensity_peaks_gap, thickness in zip(discs_data.name, discs_data.intensity_peaks_gap, discs_data.median_thickness):
+            if "L5-S" in list(discs_data.name):
+                pass
+            else:
+                raise ValueError(f"L5-S not in discs for subject {sub}")
+
                 if name not in intensity_dict:
                     intensity_dict[name] = []
                     thickness_dict[name] = []
@@ -28,10 +50,14 @@ def main():
                 # Find in dataframe overlying_vert in name
                 overlying_vert = name.split('-')[0]
                 matching_rows = vertebrae_data[vertebrae_data['name'] == overlying_vert]
-                if not matching_rows.empty:
+                matching_grades = sub_grading['Pfirrman grade'][label_discs_mapping[name] == sub_grading['IVD label']]
+                if not matching_rows.empty and not matching_grades.empty:
                     ap_thickness = float(vertebrae_data[vertebrae_data['name'] == overlying_vert]['AP_thickness'].iloc[0])
                     thickness_dict[name].append(thickness/ap_thickness)
                     intensity_dict[name].append(intensity_peaks_gap)
+                    # Extract gt grading
+                    gt_grading = sub_grading['Pfirrman grade'][label_discs_mapping[name] == sub_grading['IVD label']].iloc[0]
+                    gt_dict[name].append(gt_grading)
 
                     # Add image
                     img_dict[name].append(np.rot90(plt.imread(os.path.join(discs_imgs, f'discs_{name}_img.png'))))
