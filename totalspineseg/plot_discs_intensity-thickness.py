@@ -6,60 +6,74 @@ from scipy.signal import find_peaks
 
 def main():
     folder_path = '/home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/data/datasets/test-tss/spider_output/metrics_output'
+    grading_gt_path = '/home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/data/datasets/spider-challenge-2023/radiological_gradings.csv'
+    
+    grading_gt = pd.read_csv(grading_gt_path)
     
     thickness_dict = {}
     intensity_dict = {}
+    solidity_dict = {}
+    eccentricity_dict = {}
     img_dict = {}
+    seg_dict = {}
+    gt_dict = {}
+    label_discs_mapping ={
+        "T8-T9": 10,
+        "T9-T10": 9,
+        "T10-T11": 8,
+        "T11-T12": 7,
+        "T12-L1": 6,
+        "L1-L2": 5,
+        "L2-L3": 4,
+        "L3-L4": 3,
+        "L4-L5": 2,
+        "L5-S": 1
+    }
     for sub in os.listdir(folder_path):
         csv_folder = os.path.join(folder_path, sub, "csv")
         discs_imgs = os.path.join(folder_path, sub, "imgs")
+        sub_idx = int(sub.split('_')[0].split('-')[-1])
+        sub_grading = grading_gt[grading_gt['Patient'] == sub_idx]
         if os.path.exists(csv_folder):
             discs_data = pd.read_csv(os.path.join(csv_folder, "discs.csv"))
             vertebrae_data = pd.read_csv(os.path.join(csv_folder, "vertebrae.csv"))
-            for name, intensity_counts, intensity_bins, thickness in zip(discs_data.name, discs_data.intensity_counts, discs_data.intensity_bins, discs_data.median_thickness):
+            if "L5-S" in list(discs_data.name):
+                pass
+            else:
+                raise ValueError(f"L5-S not in discs for subject {sub}")
+
+            for name, intensity_peaks_gap, thickness, solidity, eccentricity in zip(discs_data.name, discs_data.intensity_peaks_gap, discs_data.median_thickness, discs_data.solidity, discs_data.eccentricity):
                 if name not in intensity_dict:
                     intensity_dict[name] = []
                     thickness_dict[name] = []
+                    solidity_dict[name] = []
+                    eccentricity_dict[name] = []
                     img_dict[name] = []
-                # Add image
-                img_dict[name].append(np.rot90(plt.imread(os.path.join(discs_imgs, f'discs_{name}_img.png'))))
-                intensity_counts = np.array(convert_str_to_list(intensity_counts))
-                intensity_bins = np.array(convert_str_to_list(intensity_bins))
-                bin_centers = (intensity_bins[:-1] + intensity_bins[1:]) / 2
-                # Find peaks
-                # `height` sets a minimum peak height
-                # `distance` controls how far apart peaks must be
-                peaks, properties = find_peaks(np.concatenate((np.zeros(5,), intensity_counts)), height=10, distance=2, prominence=5)
-                peaks = peaks - 5  # Adjust for padding
-                # Extract coordinates
-                peak_x = bin_centers[peaks]
-                peak_y = intensity_counts[peaks]
+                    seg_dict[name] = []
+                    gt_dict[name] = []
 
                 # Find in dataframe overlying_vert in name
                 overlying_vert = name.split('-')[0]
                 matching_rows = vertebrae_data[vertebrae_data['name'] == overlying_vert]
-                if not matching_rows.empty:
+                matching_grades = sub_grading['Pfirrman grade'][label_discs_mapping[name] == sub_grading['IVD label']]
+                if not matching_rows.empty and not matching_grades.empty:
                     ap_thickness = float(vertebrae_data[vertebrae_data['name'] == overlying_vert]['AP_thickness'].iloc[0])
                     thickness_dict[name].append(thickness/ap_thickness)
-                    if len(peak_x) == 2:
-                        # Take the mean of the two peaks
-                        intensity_dict[name].append(peak_x[-1]-peak_x[0])
-                    elif len(peak_x) == 1:
-                        intensity_dict[name].append(0)
-                    else:
-                        count = 1
-                        while len(peak_x) > 2 and count < 50:
-                            # Smooth the intensity counts with a moving average
-                            peaks, properties = find_peaks(np.concatenate((np.zeros(5,), np.convolve(intensity_counts, np.ones(count)/count, mode='same'))), height=10, distance=2, prominence=5)
-                            peaks = peaks - 5  # Adjust for padding
-                            peak_x = bin_centers[peaks]
-                            count += 2
-                        if len(peak_x) == 2:
-                            intensity_dict[name].append(peak_x[-1]-peak_x[0])
-                        elif len(peak_x) == 1:
-                            intensity_dict[name].append(0)
-                        else:
-                            raise ValueError(f"Could not find exactly two peaks for {name} in {sub}, found {len(peak_x)} peaks even after smoothing.")
+                    intensity_dict[name].append(intensity_peaks_gap)
+
+                    # Add solidity and eccentricity
+                    solidity_dict[name].append(solidity)
+                    eccentricity_dict[name].append(eccentricity)
+
+                    # Extract gt grading
+                    gt_grading = sub_grading['Pfirrman grade'][label_discs_mapping[name] == sub_grading['IVD label']].iloc[0]
+                    gt_dict[name].append(gt_grading)
+
+                    # Add image
+                    img_dict[name].append(np.rot90(plt.imread(os.path.join(discs_imgs, f'discs_{name}_img.png'))))
+                    seg_dict[name].append(np.rot90(plt.imread(os.path.join(discs_imgs, f'discs_{name}_seg.png'))))
+
+
     # Generate subplots
     # for name in intensity_dict:
     #     # Fit a curve to the data
@@ -80,33 +94,58 @@ def main():
         thickness_array = np.array(thickness_dict[name])
         intensity_array = np.array(intensity_dict[name])
         if len(thickness_array) > 0:
-            median_thickness = np.median(thickness_array[intensity_array>0.1])
-            thickness_dict[name] = (thickness_array - median_thickness) / median_thickness
+            median_thickness = np.median(thickness_array[intensity_array>0.6])
+            thickness_dict[name] = thickness_array / median_thickness
         else:
             thickness_dict[name] = thickness_array
     
     # Determine discs grades
-    x_line = np.linspace(-1, 1, 200)
-    grades = {}
-    for i in range(0, 8):
-        grades[8-i] = {'a': -3, 'b': -1.5 + 0.60 * i} # line
-        # grades[8-i] = {'a': -1, 'b': -1.8 + 0.5 * i} # exp
     grades_dict = {}
     for name in intensity_dict:
-        grades_dict[name] = []
-        for x, y in zip(thickness_dict[name], intensity_dict[name]):
-            graded = False
-            grade = 8
-            while not graded:
-                if y < line(x, grades[grade]['a'], grades[grade]['b']):
-                    graded = True
-                else:
-                    if grade == 1:
-                        grade = 0
-                        graded = True
-                    else:
-                        grade -= 1
-            grades_dict[name].append(grade)
+        if name not in grades_dict:
+            grades_dict[name] = []
+        thickness_array = np.array(thickness_dict[name])
+        intensity_array = np.array(intensity_dict[name])
+        for thickness, intensity in zip(thickness_array, intensity_array):
+            if thickness < 0.3 and intensity < 0.3:
+                grades_dict[name].append(8)
+            elif thickness < 0.6 and intensity < 0.3:
+                grades_dict[name].append(7)
+            elif thickness < 0.9 and intensity < 0.3:
+                grades_dict[name].append(6)
+            elif intensity < 0.1 and thickness >= 0.9:
+                grades_dict[name].append(5)
+            elif intensity < 0.3 and thickness >= 0.9:
+                grades_dict[name].append(4)
+            elif intensity < 0.6 and thickness >= 0.9:
+                grades_dict[name].append(3)
+            elif intensity < 0.9 and thickness >= 0.9:
+                grades_dict[name].append(2)
+            elif intensity >= 0.9 and thickness >= 0.9:
+                grades_dict[name].append(1)
+            else:
+                grades_dict[name].append(0) # error
+    # x_line = np.linspace(-1, 1, 200)
+    # grades = {}
+    # for i in range(0, 8):
+    #     grades[8-i] = {'a': -3, 'b': -1.5 + 0.60 * i} # line
+    #     # grades[8-i] = {'a': -1, 'b': -1.8 + 0.5 * i} # exp
+    # grades_dict = {}
+    # for name in intensity_dict:
+    #     grades_dict[name] = []
+    #     for x, y in zip(thickness_dict[name], intensity_dict[name]):
+    #         graded = False
+    #         grade = 8
+    #         while not graded:
+    #             if y < line(x, grades[grade]['a'], grades[grade]['b']):
+    #                 graded = True
+    #             else:
+    #                 if grade == 1:
+    #                     grade = 0
+    #                     graded = True
+    #                 else:
+    #                     grade -= 1
+    #         grades_dict[name].append(grade)
 
     # Plot general plot with all points
     plt.figure(figsize=(10, 5))
@@ -118,44 +157,55 @@ def main():
     plt.xlabel('Thickness')
     plt.ylabel('Intensity')
     plt.ylim(0, 2.0)
-    plt.xlim(-1, 1)
+    plt.xlim(0, 2)
     plt.title('Disc Intensity vs Thickness (All Discs)')
-    for grade, param in grades.items():
-        plt.plot(x_line, line(x_line, param['a'], param['b']), label=f'Grade {grade}')
     plt.legend()
-    plt.savefig('disc_intensity_vs_thickness.png')
+    if not os.path.exists('imgs'):
+        os.makedirs('imgs')
+    plt.savefig('imgs/disc_intensity_vs_thickness.png')
 
     # Create subplots for each disc with rows corresponding to grades and pick 5 examples per grade if possible
     for name in intensity_dict:
         grades_list = np.array(grades_dict[name])
         imgs = img_dict[name]
+        segs = seg_dict[name]
+        thicknesses = np.array(thickness_dict[name])
+        intensities = np.array(intensity_dict[name])
+        # Combine image and segmentation side by side for each example
+        combined_imgs = [np.concatenate((img, seg), axis=1) for img, seg in zip(imgs, segs)]
+        imgs = combined_imgs
         unique_grades = np.unique(grades_list)
-        n_grades = len(unique_grades)
-        n_examples = 5
+        if grades_list.size > 0:
+            n_grades = len(unique_grades)
+            n_examples = 5
 
-        fig, axes = plt.subplots(n_grades, n_examples, figsize=(n_examples * 3, n_grades * 3))
-        if n_grades == 1:
-            axes = np.expand_dims(axes, 0)
-        for i, grade in enumerate(unique_grades):
-            idxs = np.where(grades_list == grade)[0]
-            if len(idxs) > n_examples:
-                idxs = np.random.choice(idxs, n_examples, replace=False)
-            for j in range(n_examples):
-                ax = axes[i, j] if n_grades > 1 else axes[0, j]
-                ax.axis('off')
-                if j < len(idxs):
-                    img = imgs[idxs[j]]
-                    ax.imshow(img, cmap='gray')
-                    if grade == 0:
-                        ax.set_title(f'Grade error', fontsize=25)
+            fig, axes = plt.subplots(n_grades, n_examples, figsize=(n_examples * 3, n_grades * 3))
+            if n_grades == 1:
+                axes = np.expand_dims(axes, 0)
+            for i, grade in enumerate(unique_grades):
+                idxs = np.where(grades_list == grade)[0]
+                if len(idxs) > n_examples:
+                    idxs = np.random.choice(idxs, n_examples, replace=False)
+                for j in range(n_examples):
+                    ax = axes[i, j] if n_grades > 1 else axes[0, j]
+                    ax.axis('off')
+                    if j < len(idxs):
+                        img = imgs[idxs[j]]
+                        thickness_val = thicknesses[idxs[j]]
+                        intensity_val = intensities[idxs[j]]
+                        ax.imshow(img, cmap='gray')
+                        if grade == 0:
+                            title = f'Grade error'
+                        else:
+                            title = f'Grade {grade}'
+                        # Display thickness and intensity values
+                        ax.set_title(f'{title}\nT={thickness_val:.2f}, I={intensity_val:.2f}', fontsize=16)
                     else:
-                        ax.set_title(f'Grade {grade}', fontsize=25)
-                else:
-                    ax.set_visible(False)
-        plt.suptitle(f'Examples for disc {name}', fontsize=40)
-        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-        plt.savefig(f'imgs/disc_{name}_examples_by_grade.png')
-        plt.close()
+                        ax.set_visible(False)
+            plt.suptitle(f'Examples for disc {name}', fontsize=32)
+            plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+            plt.savefig(f'imgs/disc_{name}_examples_by_grade.png')
+            plt.close()
 
 def line(x, a, b):
     return a * x + b
