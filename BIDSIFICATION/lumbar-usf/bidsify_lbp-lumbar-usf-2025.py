@@ -58,6 +58,7 @@ def normalize_filename(filename):
         '_T2w_obl': ('_T2w', 'obl'), 
         '_T2w_FRFSE': ('_T2w', 'frfse'),
         '_T2w_STIR.': ('_T2w.', 'stir'),
+        '_T2w_STIR-': ('_T2w-', 'stir'),
         '_STIR_irFSE.': ('_T2w.', 'stirIrFse'),
         '_T2w_3D': ('_T2w', '3d'),
         '_T2w_3DSpace': ('_T2w', '3dSpace'),
@@ -67,6 +68,7 @@ def normalize_filename(filename):
         '_FLAIR.': ('_T1w.', 'flair'),
         '_STIR_IRFSE': ('_T2w', 'stirirfse'),
         '_T2w_FSE.': ('_T2w.', 'fse'),
+        '_T2w_FSE-': ('_T2w-', 'fse'),
         '_T2w_RST': ('_T2w', 'rst'),
         '_T2w_WTD': ('_T2w', 'wtd'),
         '_T1w_WTD': ('_T1w', 'wtd'),
@@ -247,8 +249,6 @@ def load_demographics(path_dataset):
                 
                 # Create notes from diagnosis and treatment info
                 notes_parts = []
-                if level_dx != 'n/a':
-                    notes_parts.append(f"Level Dx: {level_dx}")
                 if dx_code != 'n/a':
                     notes_parts.append(f"Dx Code: {dx_code}")
                 if level_treated != 'n/a':
@@ -263,6 +263,7 @@ def load_demographics(path_dataset):
                         'sex': sex,
                         'pathology': 'LBP',  # Low Back Pain for all subjects
                         'institution': 'USF',
+                        'level_dx': level_dx,
                         'notes': notes
                     }
             
@@ -277,7 +278,7 @@ def create_participants_tsv(participants_list, demographics, path_output):
     """Create participants.tsv file with demographics"""
     with open(os.path.join(path_output, 'participants.tsv'), 'w') as tsv_file:
         tsv_writer = csv.writer(tsv_file, delimiter='\t', lineterminator='\n')
-        tsv_writer.writerow(['participant_id', 'source_id', 'species', 'age', 'sex', 'pathology', 'institution', 'notes'])
+        tsv_writer.writerow(['participant_id', 'source_id', 'species', 'age', 'sex', 'pathology', 'institution', 'level_dx', 'notes'])
         
         species = 'homo sapiens'
         
@@ -292,6 +293,7 @@ def create_participants_tsv(participants_list, demographics, path_output):
                 demo.get('sex', 'n/a'),
                 demo.get('pathology', 'LBP'),
                 demo.get('institution', 'USF'),
+                demo.get('level_dx', 'n/a'),
                 demo.get('notes', 'n/a')
             ]
             tsv_writer.writerow(row)
@@ -318,6 +320,7 @@ def create_participants_json(path_output):
                          "SCI": "Traumatic Spinal Cord Injury"
                      }},
         "institution": {"Description": "Human-friendly institution name", "LongName": "BIDS Institution ID"},
+        "level_dx": {"Description": "Level of diagnosis for the participant", "LongName": "Level of Diagnosis"},
         "notes": {"Description": "Additional notes about the participant", "LongName": "Additional notes"}
     }
     write_json(path_output, 'participants.json', data_json)
