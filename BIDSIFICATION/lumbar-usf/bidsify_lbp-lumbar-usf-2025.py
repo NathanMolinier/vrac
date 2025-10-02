@@ -46,34 +46,53 @@ def normalize_filename(filename):
     """
     # Start with the original filename
     normalized = filename
-    
-    # Handle STIR -> T2w with acq-stir
-    if '_STIR.' in normalized:
-        normalized = normalized.replace('_STIR.', '_T2w.')
-        if '_acq-sagittal_' in normalized:
-            normalized = normalized.replace('_acq-sagittal_', '_acq-sagittalStir_')
-        elif '_acq-' not in normalized:
-            normalized = normalized.replace('_T2w.', '_acq-stir_T2w.')
-    
-    # Handle FLAIR -> T1w with acq-flair  
-    if '_FLAIR.' in normalized:
-        normalized = normalized.replace('_FLAIR.', '_T1w.')
-        if '_acq-sagittal_' in normalized:
-            normalized = normalized.replace('_acq-sagittal_', '_acq-sagittalFlair_')
-        elif '_acq-' not in normalized:
-            normalized = normalized.replace('_T1w.', '_acq-flair_T1w.')
+    strange_file = False
     
     # Handle sequence type suffixes - extract and move to acq field
     sequence_patterns = {
         '_T1w_FSE': ('_T1w', 'fse'),
+        '_T1_FSE': ('_T1w', 'fse'),
         '_T1w_TSE': ('_T1w', 'tse'), 
+        '_T2w_TSE': ('_T2w', 'tse'), 
+        '_T1w_RST': ('_T1w', 'rst'), 
+        '_T2w_obl': ('_T2w', 'obl'), 
         '_T2w_FRFSE': ('_T2w', 'frfse'),
-        '_T2w_FSE': ('_T2w', 'fse'),
+        '_T2w_STIR.': ('_T2w.', 'stir'),
+        '_STIR_irFSE.': ('_T2w.', 'stirIrFse'),
+        '_T2w_3D': ('_T2w', '3d'),
+        '_T2w_3DSpace': ('_T2w', '3dSpace'),
+        '_T2w_SPACE': ('_T2w', 'space'),
+        '_T2w_FS.': ('_T2w.', 'fs'),
+        '_STIR.': ('_T2w.', 'stir'),
+        '_FLAIR.': ('_T1w.', 'flair'),
+        '_STIR_IRFSE': ('_T2w', 'stirirfse'),
+        '_T2w_FSE.': ('_T2w.', 'fse'),
         '_T2w_RST': ('_T2w', 'rst'),
         '_T2w_WTD': ('_T2w', 'wtd'),
         '_T1w_WTD': ('_T1w', 'wtd'),
         '_T2w_STIRFSE': ('_T2w', 'stirfse'),
-        '_T2w_ANGLED': ('_T2w', 'angled')
+        '_T2w_ANGLED': ('_T2w', 'angled'),
+        '_T2w-angled': ('_T2w', 'angled'),
+        '_T2w_angled': ('_T2w', 'angled'),
+        '_acq-axial_3D': ('_T2w', 'axial3d'),
+        '_acq-sag_3D': ('_T2w', 'sagittal3d'),
+        '_T2w_DNE': ('_T2w', 'dne'),
+        '_T1w_DNE': ('_T1w', 'dne'),
+        '_STIR_DNE': ('_T2w', 'stirdne'),
+        '_SAGITTAL_T2_FS': ('_T2w', 'FSsagittal'),
+        '_SAGITTAL_T1': ('_T1w', 'sagittal'),
+        '_AXIAL_T2': ('_T2w', 'axial'),
+        '_SAGITTAL_STIR': ('_T2w', 'sagittalStir'),
+        '_fat.': ('_T2w.', 'dixonFat'),
+        '_fatfrac.': ('_T2w.', 'dixonFatFrac'),
+        '_inphase.': ('_T2w.', 'dixonInphase'),
+        '_outphase.': ('_T2w.', 'dixonOutphase'),
+        '_acq-axial_water': ('_T2w', 'dixonWater'),
+        '_FSE_IR.': ('_T2w.', 'stirFse'),
+        '_T2w_tirm.': ('_T2w.', 'tirm'),
+        '_T2w_tse.': ('_T2w.', 'tse'),
+        '_acq-sagittal-T2w': ('_T2w', 'sagittal'),
+        '_acq-axial-T2w': ('_T2w', 'axial'),
     }
     
     for pattern, (contrast, seq_type) in sequence_patterns.items():
@@ -83,26 +102,24 @@ def normalize_filename(filename):
             if '_acq-' in normalized:
                 normalized = re.sub(r'_acq-([^_]+)', f'_acq-\\1{seq_type.capitalize()}', normalized)
             else:
-                normalized = normalized.replace(f'_{contrast[1:]}', f'_acq-{seq_type}_{contrast[1:]}')
-    
+                normalized = normalized.replace(f'{contrast}', f'_acq-{seq_type}_{contrast[1:]}')
+
     # Handle disc information: _discs-X -> _desc-discX
     normalized = re.sub(r'_discs-(\d+)', r'_desc-disc\1', normalized)
     
-    # Handle numbered variants for chunks
-    # _T1w-1 or _T2w-1 -> _chunk-T12toL4
-    # _T1w-2 or _T2w-2 -> _chunk-L4toSI  
-    if re.search(r'_T[12]w-1[.]', normalized):
-        normalized = re.sub(r'_T([12])w-1[.]', r'_chunk-T12toL4_T\1w.', normalized)
-    elif re.search(r'_T[12]w-2[.]', normalized):
-        normalized = re.sub(r'_T([12])w-2[.]', r'_chunk-L4toSI_T\1w.', normalized)
-    elif re.search(r'_T[12]w-3[.]', normalized):
-        normalized = re.sub(r'_T([12])w-3[.]', r'_chunk-other_T\1w.', normalized)
-    
-    # Handle MP224 sequences 
-    if '_acq-MP224' in normalized:
-        normalized = re.sub(r'_acq-MP224-(\d+)', r'_acq-mp224_run-\1_T1w', normalized)
-        if not '_T1w' in normalized:
-            normalized = normalized.replace('_acq-MP224', '_acq-mp224_T1w')
+    # Handle numbered variants for chunks (_T1w-1, _T2w-1, ..., _T1w-9, _T2w-9 -> _chunk-X)
+    for i in range(1, 15):
+        pattern = fr'_T([12])w-{i}[.]'
+        replacement = fr'_chunk-{i}_T\1w.'
+        if re.search(pattern, normalized):
+            normalized = re.sub(pattern, replacement, normalized)
+            break  # Only apply one chunk replacement per filename
+
+    # Special case for nMRI_034_Pre_AXIAL_T2
+    if '_e1a.' in normalized:
+        normalized = normalized.replace('_e1a.', '_chunk-2.')
+    elif '_e1.' in normalized:
+        normalized = normalized.replace('_e1.', '_chunk-1.')
     
     # Fix chunk formatting: ensure _chunk-XXX_ not _chunk-XXX-YYY_ or -chunk-
     # Convert _acq-YYY-chunk-XXX_ to _acq-YYY_chunk-XXX_
@@ -115,8 +132,7 @@ def normalize_filename(filename):
         # Remove extension for processing
         base_filename = normalized[:ext_match.start()]
     else:
-        extension = 'nii'
-        base_filename = normalized
+        raise ValueError(f"Filename {filename} does not have a valid .nii, .nii.gz, or .json extension.")
     
     # Extract all entities from the base filename
     entities = {}
@@ -127,16 +143,25 @@ def normalize_filename(filename):
     
     if sub_match:
         entities['sub'] = sub_match.group(1)
+    elif base_filename.startswith('nMRI_034'):
+        strange_file = True
+        idx = base_filename.split('_')[1]
+        entities['sub'] = f"sub-nMRI{idx.zfill(3)}"
+
     if ses_match:
         entities['ses'] = ses_match.group(1)
-    
+    elif '_Pre_' in base_filename and strange_file:
+        entities['ses'] = f"ses-Pre"
+    elif '_Post_' in base_filename and strange_file:
+        entities['ses'] = f"ses-Post"
+
     # Extract other entities
     acq_match = re.search(r'_acq-([^_]+)', base_filename)
     chunk_match = re.search(r'_chunk-([^_]+)', base_filename)
     desc_match = re.search(r'_desc-([^_]+)', base_filename)
     run_match = re.search(r'_run-([^_]+)', base_filename)
     
-    # Extract contrast (T1w, T2w) - should be last before extension
+    # Extract contrast (T1w, T2w) - can appear anywhere in the base filename
     contrast_match = re.search(r'_(T[12]w)(?:_|$)', base_filename)
     
     # Build filename in proper BIDS order
@@ -172,6 +197,9 @@ def normalize_filename(filename):
     # Change .nii to .nii.gz for images
     if normalized.endswith('.nii'):
         normalized = normalized.replace('.nii', '.nii.gz')
+
+    if not normalized.startswith('sub-'):
+        raise ValueError(f"Normalized filename {normalized} does not start with 'sub-'. Original filename: {filename}")
     
     return normalized
 
@@ -312,13 +340,8 @@ def copy_script(path_output):
     logger.info(f'Copying {path_script_in} to {path_script_out}')
     shutil.copyfile(path_script_in, path_script_out)
 
-def main():
-    parser = get_parser()
-    args = parser.parse_args()
-    
-    path_dataset = os.path.abspath(args.path_dataset)
-    path_output = os.path.abspath(args.path_output)
-    
+def main(path_dataset, path_output):
+
     if not os.path.isdir(path_dataset):
         print(f'ERROR - {path_dataset} does not exist.')
         sys.exit(1)
@@ -382,54 +405,59 @@ def main():
                 # Normalize filename
                 normalized_fname = normalize_filename(fname)
                 path_file_out = os.path.join(anat_dir, normalized_fname)
-                
-                # Check for overwrite and add run number if needed
-                if os.path.exists(path_file_out):
-                    # Extract base filename without extension
-                    base_name, ext = os.path.splitext(normalized_fname)
-                    if ext == '.gz':
-                        base_name, ext2 = os.path.splitext(base_name)
-                        ext = ext2 + ext
-                    
-                    # Find next available run number
-                    run_num = 1
-                    while True:
-                        # Insert run entity before contrast suffix
-                        if '_T1w' in base_name:
-                            new_base = base_name.replace('_T1w', f'_run-{run_num:02d}_T1w')
-                        elif '_T2w' in base_name:
-                            new_base = base_name.replace('_T2w', f'_run-{run_num:02d}_T2w')
-                        else:
-                            new_base = f"{base_name}_run-{run_num:02d}"
+
+                if '_T1w' in normalized_fname or '_T2w' in normalized_fname:
+                    # Check for overwrite and add run number if needed
+                    if os.path.exists(path_file_out):
+                        # Extract base filename without extension
+                        base_name, ext = os.path.splitext(normalized_fname)
+                        if ext == '.gz':
+                            base_name, ext2 = os.path.splitext(base_name)
+                            ext = ext2 + ext
                         
-                        new_path = os.path.join(anat_dir, new_base + ext)
-                        if not os.path.exists(new_path):
-                            path_file_out = new_path
-                            normalized_fname = new_base + ext
-                            logger.info(f'File exists, using run number: {normalized_fname}')
-                            break
-                        run_num += 1
-                        
-                        # Safety check to prevent infinite loop
-                        if run_num > 99:
-                            error_msg = f"ERROR - Too many runs (>99) for {path_file_in}"
-                            logger.error(error_msg)
-                            error_files.append(error_msg)
-                            break
-                
-                if fname.endswith('.nii'):
-                    # Process NIfTI image: load, reorient to RPI, and save as .nii.gz
-                    logger.info(f'Processing image: {path_file_in}')
-                    img = Image(path_file_in).change_orientation('RPI')
-                    img.save(path_file_out)
-                    logger.info(f'Saved: {path_file_out}')
-                    processed_images += 1
+                        # Find next available run number
+                        run_num = 1
+                        while True:
+                            # Insert run entity before contrast suffix
+                            if '_T1w' in base_name:
+                                new_base = base_name.replace('_T1w', f'_run-{run_num:02d}_T1w')
+                            elif '_T2w' in base_name:
+                                new_base = base_name.replace('_T2w', f'_run-{run_num:02d}_T2w')
+                            else:
+                                new_base = f"{base_name}_run-{run_num:02d}"
+                            
+                            new_path = os.path.join(anat_dir, new_base + ext)
+                            if not os.path.exists(new_path):
+                                path_file_out = new_path
+                                normalized_fname = new_base + ext
+                                logger.info(f'File exists, using run number: {normalized_fname}')
+                                break
+                            run_num += 1
+                            
+                            # Safety check to prevent infinite loop
+                            if run_num > 99:
+                                error_msg = f"ERROR - Too many runs (>99) for {path_file_in}"
+                                logger.error(error_msg)
+                                error_files.append(error_msg)
+                                break
                     
-                elif fname.endswith('.json'):
-                    # Copy JSON sidecar file
-                    logger.info(f'Copying JSON: {path_file_in} -> {path_file_out}')
-                    shutil.copy(path_file_in, path_file_out)
-                    processed_jsons += 1
+                    if fname.endswith('.nii'):
+                        # Process NIfTI image: load, reorient to RPI, and save as .nii.gz
+                        logger.info(f'Processing image: {path_file_in}')
+                        img = Image(path_file_in).change_orientation('RPI')
+                        img.save(path_file_out)
+                        logger.info(f'Saved: {path_file_out}')
+                        processed_images += 1
+                        
+                    elif fname.endswith('.json'):
+                        # Copy JSON sidecar file
+                        logger.info(f'Copying JSON: {path_file_in} -> {path_file_out}')
+                        shutil.copy(path_file_in, path_file_out)
+                        processed_jsons += 1
+                else:
+                    error_msg = f"SKIPPED - Unknown contrast in filename: {path_file_in}"
+                    logger.warning(error_msg)
+                    error_files.append(error_msg)
                     
             except Exception as e:
                 error_msg = f"ERROR - Failed to process {path_file_in}: {str(e)}"
@@ -463,4 +491,9 @@ def main():
         logger.info('All files processed successfully!')
 
 if __name__ == "__main__":
-    main()
+    # parser = get_parser()
+    # args = parser.parse_args()
+    
+    path_dataset = "/Users/nathan/data/lumbar-usf-mix/sourcedata" # os.path.abspath(args.path_dataset)
+    path_output = "/Users/nathan/data/lumbar-usf-mix/lbp-lumbar-usf-2025" #os.path.abspath(args.path_output)
+    main(path_dataset, path_output)
