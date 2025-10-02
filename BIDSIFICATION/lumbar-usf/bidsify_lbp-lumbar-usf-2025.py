@@ -383,28 +383,25 @@ def main(path_dataset, path_output):
                 
             path_file_in = os.path.join(root, fname)
             
+            # Parse directory structure to get subject and session
+            rel_path = os.path.relpath(root, path_dataset)
+            path_parts = rel_path.split(os.sep)
+            
+            if len(path_parts) < 2:
+                raise ValueError(f"SKIPPED - Unexpected path structure: {path_file_in}")
+            
+            subject = path_parts[0]  # e.g., sub-nMRI001
+            session = path_parts[1]  # e.g., ses-Pre, ses-Post
+            
+            # Add to participants list
+            if (subject, subject) not in participants_list:
+                participants_list.append((subject, subject))
+            
+            # Create output directory structure
+            anat_dir = os.path.join(path_output, subject, session, 'anat')
+            create_folder(anat_dir)
+                
             try:
-                # Parse directory structure to get subject and session
-                rel_path = os.path.relpath(root, path_dataset)
-                path_parts = rel_path.split(os.sep)
-                
-                if len(path_parts) < 2:
-                    error_msg = f"SKIPPED - Unexpected path structure: {path_file_in}"
-                    logger.warning(error_msg)
-                    error_files.append(error_msg)
-                    continue
-                
-                subject = path_parts[0]  # e.g., sub-nMRI001
-                session = path_parts[1]  # e.g., ses-Pre, ses-Post
-                
-                # Add to participants list
-                if (subject, subject) not in participants_list:
-                    participants_list.append((subject, subject))
-                
-                # Create output directory structure
-                anat_dir = os.path.join(path_output, subject, session, 'anat')
-                create_folder(anat_dir)
-                
                 # Normalize filename
                 normalized_fname = normalize_filename(fname)
                 path_file_out = os.path.join(anat_dir, normalized_fname)
@@ -439,10 +436,7 @@ def main(path_dataset, path_output):
                             
                             # Safety check to prevent infinite loop
                             if run_num > 99:
-                                error_msg = f"ERROR - Too many runs (>99) for {path_file_in}"
-                                logger.error(error_msg)
-                                error_files.append(error_msg)
-                                break
+                                raise ValueError(f"ERROR - Too many runs (>99) for {path_file_in}")
                     
                     if fname.endswith('.nii'):
                         # Process NIfTI image: load, reorient to RPI, and save as .nii.gz
@@ -458,25 +452,39 @@ def main(path_dataset, path_output):
                         shutil.copy(path_file_in, path_file_out)
                         processed_jsons += 1
                 else:
-                    error_msg = f"SKIPPED - Unknown contrast in filename: {path_file_in}"
-                    logger.warning(error_msg)
-                    error_files.append(error_msg)
+                    raise ValueError("Unknown contrast")
                     
             except Exception as e:
                 error_msg = f"ERROR - Failed to process {path_file_in}: {str(e)}"
                 logger.error(error_msg)
-                error_files.append(error_msg)
-    
-    # Write error log if there were any errors
-    if error_files:
-        error_log_path = os.path.join(path_output, 'err.txt')
-        with open(error_log_path, 'w') as f:
-            f.write('BIDS Conversion Error Log\n')
-            f.write(f'Generated: {datetime.datetime.now()}\n')
-            f.write(f'Total errors: {len(error_files)}\n')
-            f.write('=' * 50 + '\n\n')
-            f.write('\n'.join(error_files))
-        logger.info(f'Error log written to {error_log_path}')
+                
+                # Copy error files to sourcedata folder with bids structure
+                try:
+                    # Create sourcedata directory in output
+                    sourcedata_dir = os.path.join(path_output, 'sourcedata')
+                    source_anat_dir = os.path.join(sourcedata_dir, subject, session, 'anat')
+
+                    create_folder(source_anat_dir)
+
+                    source_file_out = os.path.join(source_anat_dir, fname)
+
+                    if fname.endswith('.nii'):
+                        # Process NIfTI image: load, reorient to RPI, and save as .nii.gz
+                        logger.info(f'Processing image: {path_file_in}')
+                        img = Image(path_file_in).change_orientation('RPI')
+                        img.save(source_file_out)
+                        logger.info(f'Saved: {source_file_out}')
+                        processed_images += 1
+                        
+                    elif fname.endswith('.json'):
+                        # Copy JSON sidecar file
+                        logger.info(f'Copying JSON: {path_file_in} -> {source_file_out}')
+                        shutil.copy(path_file_in, source_file_out)
+                        processed_jsons += 1
+
+                except Exception as copy_error:
+                    logger.warning(f'Failed to copy error file to sourcedata: {copy_error}')
+                    error_files.append(error_msg)
     
     # Create BIDS metadata files
     create_participants_tsv(participants_list, demographics, path_output)
