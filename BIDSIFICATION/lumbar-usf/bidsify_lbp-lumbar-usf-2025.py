@@ -456,7 +456,7 @@ def main(path_dataset, path_output):
                         # Process NIfTI image: load, reorient to RPI, and save as .nii.gz
                         logger.info(f'Processing image: {path_file_in}')
                         img = Image(path_file_in).change_orientation('RPI')
-                        img.save(source_file_out)
+                        img.save(source_file_out.replace('.nii', '.nii.gz'))
                         logger.info(f'Saved: {source_file_out}')
                         processed_images += 1
                         
