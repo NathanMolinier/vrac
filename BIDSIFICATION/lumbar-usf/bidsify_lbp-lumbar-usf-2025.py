@@ -39,14 +39,13 @@ def write_json(path_output, json_filename, data_json):
         json_file.write("\n")
         logger.info(f'{json_filename} created in {path_output}')
 
-def normalize_filename(filename):
+def normalize_filename(filename, subject, session):
     """
     Normalize filename according to BIDS conventions from README
     Ensures proper entity order and formatting
     """
     # Start with the original filename
     normalized = filename
-    strange_file = False
     
     # Handle sequence type suffixes - extract and move to acq field
     sequence_patterns = {
@@ -139,23 +138,8 @@ def normalize_filename(filename):
     # Extract all entities from the base filename
     entities = {}
     
-    # Find subject and session (should be at start)
-    sub_match = re.search(r'(sub-[^_]+)', base_filename)
-    ses_match = re.search(r'(ses-[^_]+)', base_filename)
-    
-    if sub_match:
-        entities['sub'] = sub_match.group(1)
-    elif base_filename.startswith('nMRI_034'):
-        strange_file = True
-        idx = base_filename.split('_')[1]
-        entities['sub'] = f"sub-nMRI{idx.zfill(3)}"
-
-    if ses_match:
-        entities['ses'] = ses_match.group(1)
-    elif '_Pre_' in base_filename and strange_file:
-        entities['ses'] = f"ses-Pre"
-    elif '_Post_' in base_filename and strange_file:
-        entities['ses'] = f"ses-Post"
+    entities['sub'] = subject
+    entities['ses'] = session
 
     # Extract other entities
     acq_match = re.search(r'_acq-([^_]+)', base_filename)
@@ -403,7 +387,7 @@ def main(path_dataset, path_output):
                 
             try:
                 # Normalize filename
-                normalized_fname = normalize_filename(fname)
+                normalized_fname = normalize_filename(fname, subject, session)
                 path_file_out = os.path.join(anat_dir, normalized_fname)
 
                 if '_T1w' in normalized_fname or '_T2w' in normalized_fname:
