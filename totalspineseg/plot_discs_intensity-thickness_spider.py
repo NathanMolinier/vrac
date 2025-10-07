@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks
+from mpl_toolkits.mplot3d import Axes3D
 
 def main():
     folder_path = '/home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/data/datasets/test-tss/spider_output/metrics_output'
@@ -13,6 +14,7 @@ def main():
     thickness_dict = {}
     intensity_dict = {}
     solidity_dict = {}
+    volume_dict = {}
     eccentricity_dict = {}
     img_dict = {}
     seg_dict = {}
@@ -42,12 +44,13 @@ def main():
             else:
                 raise ValueError(f"L5-S not in discs for subject {sub}")
 
-            for name, intensity_peaks_gap, thickness, solidity, eccentricity in zip(discs_data.name, discs_data.intensity_peaks_gap, discs_data.median_thickness, discs_data.solidity, discs_data.eccentricity):
+            for name, intensity_peaks_gap, thickness, solidity, eccentricity, volume in zip(discs_data.name, discs_data.intensity_peaks_gap, discs_data.median_thickness, discs_data.solidity, discs_data.eccentricity, discs_data.volume):
                 if name not in intensity_dict:
                     intensity_dict[name] = []
                     thickness_dict[name] = []
                     solidity_dict[name] = []
                     eccentricity_dict[name] = []
+                    volume_dict[name] = []
                     img_dict[name] = []
                     seg_dict[name] = []
                     gt_dict[name] = []
@@ -64,6 +67,10 @@ def main():
                     # Add solidity and eccentricity
                     solidity_dict[name].append(solidity)
                     eccentricity_dict[name].append(eccentricity)
+
+                    # Add volume normalized by vertebrae volume
+                    vert_volume = float(vertebrae_data[vertebrae_data['name'] == overlying_vert]['volume'].iloc[0])
+                    volume_dict[name].append(volume/vert_volume)
 
                     # Extract gt grading
                     gt_grading = sub_grading['Pfirrman grade'][label_discs_mapping[name] == sub_grading['IVD label']].iloc[0]
@@ -92,9 +99,12 @@ def main():
     # Normalize thickness_dict values by their median
     for name in thickness_dict:
         thickness_array = np.array(thickness_dict[name])
-        intensity_array = np.array(intensity_dict[name])
+        gt_array = np.array(gt_dict[name])
         if len(thickness_array) > 0:
-            median_thickness = np.median(thickness_array[intensity_array>0.6])
+            median_thickness = np.median(thickness_array[gt_array==1]) # median of healthy discs only
+            if median_thickness == 0:
+                median_thickness = 1.0
+                print(f"Warning: median thickness is zero for disc {name}. Setting to 1.0 to avoid division by zero.")
             thickness_dict[name] = thickness_array / median_thickness
         else:
             thickness_dict[name] = thickness_array
@@ -150,19 +160,53 @@ def main():
     # Plot general plot with all points
     plt.figure(figsize=(10, 5))
     # Regroup all discs in plot
-    # for name in thickness_dict:
-    #     plt.scatter(thickness_dict[name], intensity_dict[name], label=name)
     # Plot all points together with color corresponding to grade
-    plt.scatter(np.concatenate([thickness_dict[name] for name in thickness_dict]), np.concatenate([intensity_dict[name] for name in intensity_dict]), c=np.concatenate([grades_dict[name] for name in grades_dict]))
-    plt.xlabel('Thickness')
-    plt.ylabel('Intensity')
-    plt.ylim(0, 2.0)
-    plt.xlim(0, 2)
-    plt.title('Disc Intensity vs Thickness (All Discs)')
-    plt.legend()
-    if not os.path.exists('imgs'):
-        os.makedirs('imgs')
-    plt.savefig('imgs/disc_intensity_vs_thickness.png')
+
+    # 3D scatter plot: Thickness vs Intensity vs Eccentricity
+    import plotly.graph_objects as go
+
+    thickness_all = np.concatenate([thickness_dict[name] for name in thickness_dict])
+    intensity_all = np.concatenate([intensity_dict[name] for name in intensity_dict])
+    eccentricity_all = np.concatenate([eccentricity_dict[name] for name in eccentricity_dict])
+    volume_all = np.concatenate([volume_dict[name] for name in volume_dict])
+    grades_all = np.concatenate([gt_dict[name] for name in gt_dict])
+
+    fig = go.Figure(data=[go.Scatter3d(
+        x=thickness_all,
+        y=intensity_all,
+        z=volume_all,
+        mode='markers',
+        marker=dict(
+            size=5,
+            color=grades_all,
+            colorscale='Viridis',
+            colorbar=dict(title='Grade'),
+            opacity=0.8
+        ),
+        text=[f'Grade: {g}<br>Thickness: {t:.2f}<br>Intensity: {i:.2f}<br>Volume: {v:.2f}' 
+              for g, t, i, v in zip(grades_all, thickness_all, intensity_all, volume_all)],
+        hoverinfo='text'
+    )])
+    fig.update_layout(
+        scene=dict(
+            xaxis_title='Thickness',
+            yaxis_title='Intensity',
+            zaxis_title='Volume'
+        ),
+        title='Disc: Thickness vs Intensity vs Volume'
+    )
+    fig.write_html('imgs/disc_thickness_intensity_volume_3d_plotly.html', auto_open=False)
+
+    # plt.scatter(np.concatenate([thickness_dict[name] for name in thickness_dict]), np.concatenate([intensity_dict[name] for name in intensity_dict]), c=np.concatenate([grades_dict[name] for name in grades_dict]))
+    # plt.xlabel('Thickness')
+    # plt.ylabel('Intensity')
+    # plt.ylim(0, 2.0)
+    # plt.xlim(0, 2)
+    # plt.title('Disc Intensity vs Thickness (All Discs)')
+    # plt.legend()
+    # if not os.path.exists('imgs'):
+    #     os.makedirs('imgs')
+    # plt.savefig('imgs/disc_intensity_vs_thickness.png')
 
     # Create subplots for each disc with rows corresponding to grades and pick 5 examples per grade if possible
     for name in intensity_dict:
