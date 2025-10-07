@@ -19,6 +19,7 @@ def main():
     img_dict = {}
     seg_dict = {}
     gt_dict = {}
+    sub_dict = {}
     label_discs_mapping ={
         "T8-T9": 10,
         "T9-T10": 9,
@@ -54,6 +55,7 @@ def main():
                     img_dict[name] = []
                     seg_dict[name] = []
                     gt_dict[name] = []
+                    sub_dict[name] = []
 
                 # Find in dataframe overlying_vert in name
                 overlying_vert = name.split('-')[0]
@@ -79,6 +81,9 @@ def main():
                     # Add image
                     img_dict[name].append(np.rot90(plt.imread(os.path.join(discs_imgs, f'discs_{name}_img.png'))))
                     seg_dict[name].append(np.rot90(plt.imread(os.path.join(discs_imgs, f'discs_{name}_seg.png'))))
+
+                    # Add subject name
+                    sub_dict[name].append(sub)
 
 
     # Generate subplots
@@ -163,50 +168,50 @@ def main():
     # Plot all points together with color corresponding to grade
 
     # 3D scatter plot: Thickness vs Intensity vs Eccentricity
-    import plotly.graph_objects as go
+    # import plotly.graph_objects as go
 
-    thickness_all = np.concatenate([thickness_dict[name] for name in thickness_dict])
-    intensity_all = np.concatenate([intensity_dict[name] for name in intensity_dict])
-    eccentricity_all = np.concatenate([eccentricity_dict[name] for name in eccentricity_dict])
-    volume_all = np.concatenate([volume_dict[name] for name in volume_dict])
-    grades_all = np.concatenate([gt_dict[name] for name in gt_dict])
+    # thickness_all = np.concatenate([thickness_dict[name] for name in thickness_dict])
+    # intensity_all = np.concatenate([intensity_dict[name] for name in intensity_dict])
+    # eccentricity_all = np.concatenate([eccentricity_dict[name] for name in eccentricity_dict])
+    # volume_all = np.concatenate([volume_dict[name] for name in volume_dict])
+    # grades_all = np.concatenate([gt_dict[name] for name in gt_dict])
 
-    fig = go.Figure(data=[go.Scatter3d(
-        x=thickness_all,
-        y=intensity_all,
-        z=volume_all,
-        mode='markers',
-        marker=dict(
-            size=5,
-            color=grades_all,
-            colorscale='Viridis',
-            colorbar=dict(title='Grade'),
-            opacity=0.8
-        ),
-        text=[f'Grade: {g}<br>Thickness: {t:.2f}<br>Intensity: {i:.2f}<br>Volume: {v:.2f}' 
-              for g, t, i, v in zip(grades_all, thickness_all, intensity_all, volume_all)],
-        hoverinfo='text'
-    )])
-    fig.update_layout(
-        scene=dict(
-            xaxis_title='Thickness',
-            yaxis_title='Intensity',
-            zaxis_title='Volume'
-        ),
-        title='Disc: Thickness vs Intensity vs Volume'
-    )
-    fig.write_html('imgs/disc_thickness_intensity_volume_3d_plotly.html', auto_open=False)
+    # fig = go.Figure(data=[go.Scatter3d(
+    #     x=thickness_all,
+    #     y=intensity_all,
+    #     z=volume_all,
+    #     mode='markers',
+    #     marker=dict(
+    #         size=5,
+    #         color=grades_all,
+    #         colorscale='Viridis',
+    #         colorbar=dict(title='Grade'),
+    #         opacity=0.8
+    #     ),
+    #     text=[f'Grade: {g}<br>Thickness: {t:.2f}<br>Intensity: {i:.2f}<br>Volume: {v:.2f}' 
+    #           for g, t, i, v in zip(grades_all, thickness_all, intensity_all, volume_all)],
+    #     hoverinfo='text'
+    # )])
+    # fig.update_layout(
+    #     scene=dict(
+    #         xaxis_title='Thickness',
+    #         yaxis_title='Intensity',
+    #         zaxis_title='Volume'
+    #     ),
+    #     title='Disc: Thickness vs Intensity vs Volume'
+    # )
+    # fig.write_html('imgs/disc_thickness_intensity_volume_3d_plotly.html', auto_open=False)
 
-    # plt.scatter(np.concatenate([thickness_dict[name] for name in thickness_dict]), np.concatenate([intensity_dict[name] for name in intensity_dict]), c=np.concatenate([grades_dict[name] for name in grades_dict]))
-    # plt.xlabel('Thickness')
-    # plt.ylabel('Intensity')
-    # plt.ylim(0, 2.0)
-    # plt.xlim(0, 2)
-    # plt.title('Disc Intensity vs Thickness (All Discs)')
-    # plt.legend()
-    # if not os.path.exists('imgs'):
-    #     os.makedirs('imgs')
-    # plt.savefig('imgs/disc_intensity_vs_thickness.png')
+    plt.scatter(np.concatenate([thickness_dict[name] for name in thickness_dict]), np.concatenate([intensity_dict[name] for name in intensity_dict]), c=np.concatenate([gt_dict[name] for name in grades_dict]))
+    plt.xlabel('Thickness')
+    plt.ylabel('Intensity')
+    plt.ylim(0, 2.0)
+    plt.xlim(0, 2)
+    plt.title('Disc Intensity vs Thickness (All Discs)')
+    plt.legend()
+    if not os.path.exists('imgs'):
+        os.makedirs('imgs')
+    plt.savefig('imgs/disc_intensity_vs_thickness.png')
 
     # Create subplots for each disc with rows corresponding to grades and pick 5 examples per grade if possible
     for name in intensity_dict:
@@ -215,6 +220,7 @@ def main():
         segs = seg_dict[name]
         thicknesses = np.array(thickness_dict[name])
         intensities = np.array(intensity_dict[name])
+        subs = np.array(sub_dict[name])
         # Combine image and segmentation side by side for each example
         combined_imgs = [np.concatenate((img, seg), axis=1) for img, seg in zip(imgs, segs)]
         imgs = combined_imgs
@@ -237,13 +243,14 @@ def main():
                         img = imgs[idxs[j]]
                         thickness_val = thicknesses[idxs[j]]
                         intensity_val = intensities[idxs[j]]
+                        sub = subs[idxs[j]]
                         ax.imshow(img, cmap='gray')
                         if grade == 0:
                             title = f'Grade error'
                         else:
                             title = f'Grade {grade}'
                         # Display thickness and intensity values
-                        ax.set_title(f'{title}\nT={thickness_val:.2f}, I={intensity_val:.2f}', fontsize=16)
+                        ax.set_title(f'{title}\n{sub.replace("_T2w", "")}\nT={thickness_val:.2f}, I={intensity_val:.2f}', fontsize=16)
                     else:
                         ax.set_visible(False)
             plt.suptitle(f'Examples for disc {name}', fontsize=32)
