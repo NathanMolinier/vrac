@@ -357,6 +357,7 @@ def plot_side_by_side_comparison(metric_dict, metric_name, output_dir='imgs'):
         plt.close()
         
         print(f"Side-by-side comparison plot {fig_idx//n_subjects_per_fig + 1} saved for {metric_name}")
+        break
 
 
 def plot_correlation_matrix(all_metrics_dict, output_dir='imgs'):
@@ -464,7 +465,7 @@ def generate_robustness_summary(all_metrics_dict, output_dir='imgs'):
     if summary_data:
         summary_df = pd.DataFrame(summary_data)
         summary_df = summary_df.round(3)
-        summary_df.to_csv(os.path.join(output_dir, 'overall_robustness_summary.csv'), index=False)
+        # summary_df.to_csv(os.path.join(output_dir, 'overall_robustness_summary.csv'), index=False)
         
         # Print summary to console
         print("\n" + "="*80)
