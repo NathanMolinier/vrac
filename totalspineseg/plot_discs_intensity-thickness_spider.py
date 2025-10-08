@@ -32,12 +32,13 @@ def main():
         "L4-L5": 2,
         "L5-S": 1
     }
+    filter = 'lowres'
     for sub in os.listdir(folder_path):
         csv_folder = os.path.join(folder_path, sub, "csv")
         discs_imgs = os.path.join(folder_path, sub, "imgs")
         sub_idx = int(sub.split('_')[0].split('-')[-1])
         sub_grading = grading_gt[grading_gt['Patient'] == sub_idx]
-        if os.path.exists(csv_folder):
+        if os.path.exists(csv_folder) and filter in sub:
             discs_data = pd.read_csv(os.path.join(csv_folder, "discs.csv"))
             vertebrae_data = pd.read_csv(os.path.join(csv_folder, "vertebrae.csv"))
             if "L5-S" in list(discs_data.name):
