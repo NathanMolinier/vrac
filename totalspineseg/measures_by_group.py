@@ -117,34 +117,54 @@ def main():
     # GROUP ANALYSIS AND ROBUSTNESS EVALUATION
     print("Starting demographic group analysis and robustness evaluation...")
     
-    # Group data by demographics (age terciles and sex)
-    grouped_data = group_data_by_demographics(all_values, all_demographics)
+    # Group data by demographics separately for sex and age
+    grouped_by_sex, grouped_by_age = group_data_by_demographics(all_values, all_demographics)
     
-    # Calculate robustness metrics for subjects with multiple measurements
-    robustness_data = calculate_robustness_metrics_by_group(grouped_data)
-    
-    # Create output folder
+    # Create output folders
     output_folder.mkdir(exist_ok=True)
+    sex_output_folder = output_folder / 'by_sex'
+    age_output_folder = output_folder / 'by_age'
+    sex_output_folder.mkdir(exist_ok=True)
+    age_output_folder.mkdir(exist_ok=True)
     
-    # Generate plots by groups
-    print("Generating plots by demographic groups...")
-    plot_metrics_by_groups(grouped_data, robustness_data, output_folder)
+    # Generate plots by sex
+    print("Generating plots by sex...")
+    plot_metrics_by_sex(grouped_by_sex, sex_output_folder)
     
-    # Generate robustness summary
-    print("Generating robustness analysis summary...")
-    plot_robustness_summary(robustness_data, output_folder)
+    # Generate plots by age
+    print("Generating plots by age...")
+    plot_metrics_by_age(grouped_by_age, age_output_folder)
     
-    # Perform statistical analysis
-    print("Performing statistical analysis between groups...")
-    perform_statistical_analysis(grouped_data, output_folder)
+    # Calculate robustness metrics for both groupings
+    robustness_data_sex = calculate_robustness_metrics_by_group(grouped_by_sex)
+    robustness_data_age = calculate_robustness_metrics_by_group(grouped_by_age)
+    
+    # Generate robustness summary for sex groups
+    print("Generating robustness analysis summary by sex...")
+    plot_robustness_summary(robustness_data_sex, sex_output_folder)
+    
+    # Generate robustness summary for age groups
+    print("Generating robustness analysis summary by age...")
+    plot_robustness_summary(robustness_data_age, age_output_folder)
+    
+    # Perform statistical analysis for both groupings
+    print("Performing statistical analysis between sex groups...")
+    perform_statistical_analysis(grouped_by_sex, sex_output_folder)
+    
+    print("Performing statistical analysis between age groups...")
+    perform_statistical_analysis(grouped_by_age, age_output_folder)
     
     print(f"Analysis complete! Results saved to {output_folder}")
     print(f"Check the following files:")
     print(f"  - Overall robustness: {output_folder}/overall_robustness_summary_plots.png")
-    print(f"  - Individual metric plots: {output_folder}/*_by_groups.png")
-    print(f"  - Robustness summary: {output_folder}/robustness_summary.png")
-    print(f"  - Statistical comparisons: {output_folder}/statistical_comparisons.csv")
-    print(f"  - Robustness statistics: {output_folder}/robustness_summary_stats.csv")
+    print(f"  - Sex-based analysis: {sex_output_folder}/")
+    print(f"    * Combined metric plots: *_all_metrics_by_sex.png")
+    print(f"    * Robustness summary: robustness_summary.png")
+    print(f"    * Statistical comparisons: statistical_comparisons.csv")
+    print(f"  - Age-based analysis: {age_output_folder}/")
+    print(f"    * Combined metric plots: *_all_metrics_by_age.png") 
+    print(f"    * Robustness summary: robustness_summary.png")
+    print(f"    * Statistical comparisons: statistical_comparisons.csv")
 
     print()
 
@@ -668,23 +688,26 @@ def categorize_age_groups(age):
 
 def group_data_by_demographics(all_values, all_demographics):
     """
-    Group data by age and sex for analysis.
+    Group data by sex and age separately for analysis.
     
     Args:
         all_values: Dictionary with structure {struc: {struc_name: {metric: [values]}}}
         all_demographics: Dictionary with structure {struc: {struc_name: {metric: [demographics]}}}
     
     Returns:
-        Grouped data dictionary
+        Two separate grouped data dictionaries: grouped_by_sex, grouped_by_age
     """
-    grouped_data = {}
-    sex_dict = {'M':'Male', 'F':'Female'}
+    grouped_by_sex = {}
+    grouped_by_age = {}
+    sex_dict = {'M': 'Male', 'F': 'Female'}
     
     for struc in all_values.keys():
-        grouped_data[struc] = {}
+        grouped_by_sex[struc] = {}
+        grouped_by_age[struc] = {}
         
         for struc_name in all_values[struc].keys():
-            grouped_data[struc][struc_name] = {}
+            grouped_by_sex[struc][struc_name] = {}
+            grouped_by_age[struc][struc_name] = {}
             
             for metric in all_values[struc][struc_name].keys():
                 if metric in ['discs_gap', 'slice_interp']:  # Skip non-metric data
@@ -693,33 +716,36 @@ def group_data_by_demographics(all_values, all_demographics):
                 values = all_values[struc][struc_name][metric]
                 demographics = all_demographics[struc][struc_name][metric]
                 
-                # Group data
-                group_data = {
-                    'Male_18-39': {'values': [], 'demographics': []},
-                    'Male_40-59': {'values': [], 'demographics': []},
-                    'Male_60+': {'values': [], 'demographics': []},
-                    'Female_18-39': {'values': [], 'demographics': []},
-                    'Female_40-59': {'values': [], 'demographics': []},
-                    'Female_60+': {'values': [], 'demographics': []}
+                # Group by sex
+                sex_groups = {
+                    'Male': {'values': [], 'demographics': []},
+                    'Female': {'values': [], 'demographics': []}
+                }
+                
+                # Group by age
+                age_groups = {
+                    '18-39': {'values': [], 'demographics': []},
+                    '40-59': {'values': [], 'demographics': []},
+                    '60+': {'values': [], 'demographics': []}
                 }
                 
                 for val, demo in zip(values, demographics):
                     age = demo['age']
                     sex = sex_dict[demo['sex']]
                     
-                    # Determine age group
-                    age_group = categorize_age_groups(age)
-
-                    # Create group key
-                    group_key = f"{sex}_{age_group}"
+                    # Add to sex groups
+                    sex_groups[sex]['values'].append(val)
+                    sex_groups[sex]['demographics'].append(demo)
                     
-                    if group_key in group_data:
-                        group_data[group_key]['values'].append(val)
-                        group_data[group_key]['demographics'].append(demo)
+                    # Add to age groups
+                    age_group = categorize_age_groups(age)
+                    age_groups[age_group]['values'].append(val)
+                    age_groups[age_group]['demographics'].append(demo)
                 
-                grouped_data[struc][struc_name][metric] = group_data
+                grouped_by_sex[struc][struc_name][metric] = sex_groups
+                grouped_by_age[struc][struc_name][metric] = age_groups
     
-    return grouped_data
+    return grouped_by_sex, grouped_by_age
 
 
 def calculate_robustness_metrics_by_group(grouped_data):
@@ -781,38 +807,59 @@ def calculate_robustness_metrics_by_group(grouped_data):
     return robustness_data
 
 
-def plot_metrics_by_groups(grouped_data, robustness_data, output_folder):
+def plot_metrics_by_sex(grouped_data, output_folder):
     """
-    Create comprehensive plots showing metrics by age/sex groups with robustness analysis.
-    Organized by measurement and structure, with levels on x-axis, measurements on y-axis, and groups as hues.
+    Create plots showing metrics by sex groups in a single subplot figure.
     
     Args:
-        grouped_data: Dictionary from group_data_by_demographics
-        robustness_data: Dictionary from calculate_robustness_metrics_by_group
+        grouped_data: Dictionary grouped by sex from group_data_by_demographics
         output_folder: Path to save plots
     """
     output_folder = Path(output_folder)
     output_folder.mkdir(exist_ok=True)
     
-    # Define colors for groups
+    # Define colors for sex groups
     color_map = {
-        'Male_18-39': "#1f77b4",
-        'Male_40-59': '#ff7f0e', 
-        'Male_60+': '#2ca02c',
-        'Female_18-39': '#d62728',
-        'Female_40-59': '#9467bd',
-        'Female_60+': '#8c564b'
+        'Male': "#1f77b4",
+        'Female': '#d62728'
     }
-
-    groups = [
-        'Male_18-39', 'Male_40-59', 'Male_60+',
-        'Female_18-39', 'Female_40-59', 'Female_60+'
-    ]
     
-    # Create plots for each metric
+    groups = ['Male', 'Female']
+    
+    # Process each structure separately
     for struc in grouped_data.keys():
-        all_metrics = grouped_data[struc][list(grouped_data[struc].keys())[0]].keys()
-        for metric in all_metrics:
+        # Get all metrics and structures for this structure type
+        all_structures = list(grouped_data[struc].keys())
+        if not all_structures:
+            continue
+            
+        # Get all unique metrics across all structures
+        all_metrics = set()
+        for struc_name in all_structures:
+            all_metrics.update(grouped_data[struc][struc_name].keys())
+        all_metrics = sorted(list(all_metrics))
+        
+        if not all_metrics:
+            continue
+        
+        # Create subplot grid - one subplot per metric
+        n_metrics = len(all_metrics)
+        n_cols = min(3, n_metrics)
+        n_rows = (n_metrics + n_cols - 1) // n_cols
+        
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(6*n_cols, 5*n_rows))
+        if n_metrics == 1:
+            axes = [axes]
+        elif n_rows == 1:
+            axes = axes if n_metrics > 1 else [axes]
+        else:
+            axes = axes.flatten()
+        
+        fig.suptitle(f'Structure {struc} - All Metrics by Sex', fontsize=16, y=0.98)
+        
+        for idx, metric in enumerate(all_metrics):
+            ax = axes[idx] if n_metrics > 1 else axes[0]
+            
             # Get all structures that have this metric
             structure_levels = []
             for struc_name in grouped_data[struc].keys():
@@ -822,30 +869,28 @@ def plot_metrics_by_groups(grouped_data, robustness_data, output_folder):
             # Sort structures in anatomical order
             structure_levels = sort_anatomical_structures(structure_levels)
             
-            # Create subplot grid for this metric      
-            fig, ax = plt.subplots(1, 1)
-            
-            fig.suptitle(f'Structure {struc} - Metric: {metric}', fontsize=16, y=0.98)
+            if not structure_levels:
+                continue
                             
             # Prepare data for line plot with error bars
-            plot_data = {}
+            plot_data = {group: {'means': [], 'stds': [], 'levels': []} for group in groups}
+            
             for level in structure_levels:
                 for group in groups:
-                    if not group in plot_data:
-                        plot_data[group] = {'means': [], 'stds': [], 'levels': []}
-                    values = grouped_data[struc][level][metric][group]['values']
-                    if values:
-                        plot_data[group]['means'].append(np.mean(values))
-                        plot_data[group]['stds'].append(np.std(values))
-                        plot_data[group]['levels'].append(level)
-                    else:
-                        plot_data[group]['means'].append(np.nan)
-                        plot_data[group]['stds'].append(np.nan)
-                        plot_data[group]['levels'].append(level)
-                
-                # Plot lines with error bars for each group
-                x_positions = range(len(structure_levels))
-
+                    if level in grouped_data[struc] and metric in grouped_data[struc][level]:
+                        values = grouped_data[struc][level][metric][group]['values']
+                        if values:
+                            plot_data[group]['means'].append(np.mean(values))
+                            plot_data[group]['stds'].append(np.std(values))
+                            plot_data[group]['levels'].append(level)
+                        else:
+                            plot_data[group]['means'].append(np.nan)
+                            plot_data[group]['stds'].append(np.nan)
+                            plot_data[group]['levels'].append(level)
+            
+            # Plot lines with error bars for each group
+            x_positions = range(len(structure_levels))
+            
             for group in groups:
                 if plot_data[group]['means']:
                     means = plot_data[group]['means']
@@ -857,124 +902,160 @@ def plot_metrics_by_groups(grouped_data, robustness_data, output_folder):
                         valid_x = [x_positions[i] for i in valid_indices]
                         valid_means = [means[i] for i in valid_indices]
                         valid_stds = [stds[i] for i in valid_indices]
-                        valid_levels = [structure_levels[i] for i in valid_indices]
                         
                         # Plot line with error bars
                         ax.errorbar(valid_x, valid_means, yerr=valid_stds, 
-                                label=group.replace('_', ' '), 
-                                color=color_map[group], 
-                                marker='o', linewidth=2, markersize=6,
-                                capsize=5, capthick=2, alpha=0.8)
-                
+                                   label=group, 
+                                   color=color_map[group], 
+                                   marker='o', linewidth=2, markersize=6,
+                                   capsize=5, capthick=2, alpha=0.8)
+            
             # Formatting
             ax.set_xticks(x_positions)
             ax.set_xticklabels(structure_levels, rotation=45, ha='right')
             ax.set_xlabel('Structure Level')
             ax.set_ylabel(f'{metric}')
+            ax.set_title(f'{metric}')
             ax.grid(True, alpha=0.3)
-            ax.legend(bbox_to_anchor=(1.05, 1), loc='best')
-            
-            plt.tight_layout()
-            plt.savefig(output_folder / f'metric_{struc}_{metric}_by_levels_and_groups.png', 
-                    dpi=300, bbox_inches='tight')
-            plt.close()
-            
-            print(f"Saved plot for metric: {metric}")
+            if idx == 0:  # Only add legend to first subplot
+                ax.legend()
+        
+        # Remove empty subplots
+        for idx in range(n_metrics, len(axes)):
+            fig.delaxes(axes[idx])
+        
+        plt.tight_layout()
+        plt.savefig(output_folder / f'{struc}_all_metrics_by_sex.png', 
+                   dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        print(f"Saved sex plot for structure: {struc}")
+
+
+def plot_metrics_by_age(grouped_data, output_folder):
+    """
+    Create plots showing metrics by age groups in a single subplot figure.
     
-    # Also create a comprehensive overview plot with all metrics for one structure
+    Args:
+        grouped_data: Dictionary grouped by age from group_data_by_demographics
+        output_folder: Path to save plots
+    """
+    output_folder = Path(output_folder)
+    output_folder.mkdir(exist_ok=True)
+    
+    # Define colors for age groups
+    color_map = {
+        '18-39': "#2ca02c",
+        '40-59': '#ff7f0e',
+        '60+': '#9467bd'
+    }
+    
+    groups = ['18-39', '40-59', '60+']
+    
+    # Process each structure separately
     for struc in grouped_data.keys():
-        # Get all structure names for this structure type
-        struc_names = list(grouped_data[struc].keys())
-        if not struc_names:
+        # Get all metrics and structures for this structure type
+        all_structures = list(grouped_data[struc].keys())
+        if not all_structures:
             continue
             
-        # Take the first structure name that has multiple metrics
-        best_struc_name = None
-        max_metrics = 0
-        for sn in struc_names:
-            metrics_count = len([m for m in grouped_data[struc][sn].keys() 
-                               if m not in ['discs_gap', 'slice_interp']])
-            if metrics_count > max_metrics:
-                max_metrics = metrics_count
-                best_struc_name = sn
+        # Get all unique metrics across all structures
+        all_metrics = set()
+        for struc_name in all_structures:
+            all_metrics.update(grouped_data[struc][struc_name].keys())
+        all_metrics = sorted(list(all_metrics))
         
-        if best_struc_name and max_metrics > 1:
-            available_metrics = [m for m in grouped_data[struc][best_struc_name].keys() 
-                               if m not in ['discs_gap', 'slice_interp']]
+        if not all_metrics:
+            continue
+        
+        # Create subplot grid - one subplot per metric
+        n_metrics = len(all_metrics)
+        n_cols = min(3, n_metrics)
+        n_rows = (n_metrics + n_cols - 1) // n_cols
+        
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(6*n_cols, 5*n_rows))
+        if n_metrics == 1:
+            axes = [axes]
+        elif n_rows == 1:
+            axes = axes if n_metrics > 1 else [axes]
+        else:
+            axes = axes.flatten()
+        
+        fig.suptitle(f'Structure {struc} - All Metrics by Age', fontsize=16, y=0.98)
+        
+        for idx, metric in enumerate(all_metrics):
+            ax = axes[idx] if n_metrics > 1 else axes[0]
             
-            n_metrics = len(available_metrics)
-            n_cols = min(3, n_metrics)
-            n_rows = (n_metrics + n_cols - 1) // n_cols
+            # Get all structures that have this metric
+            structure_levels = []
+            for struc_name in grouped_data[struc].keys():
+                if metric in grouped_data[struc][struc_name]:
+                    structure_levels.append(struc_name)
             
-            fig, axes = plt.subplots(n_rows, n_cols, figsize=(6*n_cols, 5*n_rows))
-            if n_metrics == 1:
-                axes = [axes]
-            elif n_rows == 1:
-                axes = axes if n_metrics > 1 else [axes]
-            else:
-                axes = axes.flatten()
+            # Sort structures in anatomical order
+            structure_levels = sort_anatomical_structures(structure_levels)
             
-            fig.suptitle(f'All Metrics for {struc}', fontsize=16, y=0.98)
+            if not structure_levels:
+                continue
+                            
+            # Prepare data for line plot with error bars
+            plot_data = {group: {'means': [], 'stds': [], 'levels': []} for group in groups}
             
-            for idx, metric in enumerate(available_metrics):
-                ax = axes[idx] if n_metrics > 1 else axes[0]
-                
-                # Get all levels for this structure
-                all_levels = sort_anatomical_structures([sn for sn in grouped_data[struc].keys() 
-                                                       if metric in grouped_data[struc][sn]])
-                
-                # Plot similar to above but for all levels
-                x_positions = range(len(all_levels))
-                
+            for level in structure_levels:
                 for group in groups:
-                    means = []
-                    stds = []
-                    
-                    for level in all_levels:
-                        if level in grouped_data[struc] and metric in grouped_data[struc][level]:
-                            values = grouped_data[struc][level][metric][group]['values']
-                            if values:
-                                means.append(np.mean(values))
-                                stds.append(np.std(values))
-                            else:
-                                means.append(np.nan)
-                                stds.append(np.nan)
+                    if level in grouped_data[struc] and metric in grouped_data[struc][level]:
+                        values = grouped_data[struc][level][metric][group]['values']
+                        if values:
+                            plot_data[group]['means'].append(np.mean(values))
+                            plot_data[group]['stds'].append(np.std(values))
+                            plot_data[group]['levels'].append(level)
                         else:
-                            means.append(np.nan)
-                            stds.append(np.nan)
+                            plot_data[group]['means'].append(np.nan)
+                            plot_data[group]['stds'].append(np.nan)
+                            plot_data[group]['levels'].append(level)
+            
+            # Plot lines with error bars for each group
+            x_positions = range(len(structure_levels))
+            
+            for group in groups:
+                if plot_data[group]['means']:
+                    means = plot_data[group]['means']
+                    stds = plot_data[group]['stds']
                     
-                    # Remove NaN values
+                    # Remove NaN values for plotting
                     valid_indices = [i for i, m in enumerate(means) if not np.isnan(m)]
                     if valid_indices:
                         valid_x = [x_positions[i] for i in valid_indices]
                         valid_means = [means[i] for i in valid_indices]
                         valid_stds = [stds[i] for i in valid_indices]
                         
+                        # Plot line with error bars
                         ax.errorbar(valid_x, valid_means, yerr=valid_stds, 
-                                   label=group.replace('_', ' '), 
+                                   label=f'{group} years', 
                                    color=color_map[group], 
-                                   marker='o', linewidth=2, markersize=6,
+                                   marker='s', linewidth=2, markersize=6,
                                    capsize=5, capthick=2, alpha=0.8)
-                
-                ax.set_xticks(x_positions)
-                ax.set_xticklabels(all_levels, rotation=45, ha='right')
-                ax.set_xlabel('Structure Level')
-                ax.set_ylabel(f'{metric}')
-                ax.set_title(f'{metric}')
-                ax.grid(True, alpha=0.3)
-                if idx == 0:  # Only add legend to first subplot
-                    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
             
-            # Remove empty subplots
-            for idx in range(n_metrics, len(axes)):
-                fig.delaxes(axes[idx])
-            
-            plt.tight_layout()
-            plt.savefig(output_folder / f'{struc}_all_metrics_by_levels_and_groups.png', 
-                       dpi=300, bbox_inches='tight')
-            plt.close()
-            
-            print(f"Saved comprehensive plot for structure: {struc}")
+            # Formatting
+            ax.set_xticks(x_positions)
+            ax.set_xticklabels(structure_levels, rotation=45, ha='right')
+            ax.set_xlabel('Structure Level')
+            ax.set_ylabel(f'{metric}')
+            ax.set_title(f'{metric}')
+            ax.grid(True, alpha=0.3)
+            if idx == 0:  # Only add legend to first subplot
+                ax.legend()
+        
+        # Remove empty subplots
+        for idx in range(n_metrics, len(axes)):
+            fig.delaxes(axes[idx])
+        
+        plt.tight_layout()
+        plt.savefig(output_folder / f'{struc}_all_metrics_by_age.png', 
+                   dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        print(f"Saved age plot for structure: {struc}")
 
 
 def plot_robustness_summary(robustness_data, output_folder):
