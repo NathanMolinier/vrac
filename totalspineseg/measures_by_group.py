@@ -10,6 +10,64 @@ from pathlib import Path
 from sklearn.preprocessing import StandardScaler
 from scipy.stats import mannwhitneyu, kruskal
 
+def sort_anatomical_structures(structure_list):
+    """
+    Sort anatomical structures in correct anatomical order.
+    
+    Args:
+        structure_list: List of structure names to sort
+        
+    Returns:
+        List of structures sorted in anatomical order
+    """
+    def get_sort_key(structure):
+        """Generate sorting key for anatomical structures."""
+        structure = structure.strip()
+        
+        # Handle vertebrae (T9, T10, T11, T12, L1, L2, L3, L4, L5, S1)
+        if re.match(r'^T\d+$', structure):
+            return (0, int(structure[1:]))  # Thoracic vertebrae
+        elif re.match(r'^L\d+$', structure):
+            return (1, int(structure[1:]))  # Lumbar vertebrae
+        elif re.match(r'^S\d+$', structure):
+            return (2, int(structure[1:]))  # Sacral vertebrae
+        
+        # Handle discs (T9-T10, T10-T11, ..., T12-L1, L1-L2, ..., L5-S1)
+        elif '-' in structure:
+            parts = structure.split('-')
+            if len(parts) == 2:
+                upper, lower = parts[0].strip(), parts[1].strip()
+                
+                # Get numeric values for both parts
+                upper_key = get_sort_key(upper)
+                lower_key = get_sort_key(lower)
+                
+                # Use the upper vertebra as primary sort key for discs
+                return upper_key
+        
+        # Handle foramens (foramens_T11-T12, foramens_T12-L1, foramens_L1-L2)
+        elif structure.startswith('foramens_'):
+            disc_part = structure.replace('foramens_', '')
+            return get_sort_key(disc_part)
+        
+        # Default case - try to extract any vertebral level information
+        else:
+            # Look for T/L/S patterns in the string
+            match = re.search(r'([TLS])(\d+)', structure)
+            if match:
+                letter, number = match.groups()
+                if letter == 'T':
+                    return (0, int(number))
+                elif letter == 'L':
+                    return (1, int(number))
+                elif letter == 'S':
+                    return (2, int(number))
+        
+        # If no pattern matches, sort alphabetically at the end
+        return (9999, structure)
+    
+    return sorted(structure_list, key=get_sort_key)
+
 def main():
     folder_path = Path('/home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/data/datasets/test-tss/lbp_sag_out/metrics_output')
     demographics_path = Path('/home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/data/datasets/lbp-lumbar-usf-2025/participants.tsv')
@@ -192,7 +250,7 @@ def compute_discs_metrics(data_dict):
             data_dict['discs'][struc_name]['DHI'] = data_dict['discs'][struc_name]['median_thickness'] / data_dict['vertebrae'][top_vertebra]['AP_thickness']
 
             # Normalize disc volume with top vertebra volume
-            data_dict['discs'][struc_name]['volume'] = data_dict['discs'][struc_name]['volume'] / data_dict['vertebrae'][top_vertebra]['volume']
+            data_dict['discs'][struc_name]['volume'] = data_dict['discs'][struc_name]['volume'] #/ data_dict['vertebrae'][top_vertebra]['AP_thickness']
         else:
             data_dict['discs'][struc_name]['DHI'] = -1
             data_dict['discs'][struc_name]['volume'] = -1
@@ -221,11 +279,11 @@ def compute_foramens_metrics(data_dict):
 
 def compute_vertebrae_metrics(data_dict):
     # Compute Vertebrae metrics
-    for struc_name in data_dict['vertebrae'].keys():
-        # Normalize foramen surfaces with top vertebra volume
-        for metric in data_dict['vertebrae'][struc_name].keys():
-            if metric != 'volume':
-                data_dict['vertebrae'][struc_name][metric] = data_dict['vertebrae'][struc_name][metric] / data_dict['vertebrae'][struc_name]['volume']
+    # for struc_name in data_dict['vertebrae'].keys():
+    #     # Normalize foramen surfaces with top vertebra volume
+    #     for metric in data_dict['vertebrae'][struc_name].keys():
+    #         if metric != 'volume':
+    #             data_dict['vertebrae'][struc_name][metric] = data_dict['vertebrae'][struc_name][metric] / data_dict['vertebrae'][struc_name]['volume']
     return data_dict
 
 def rescale_canal(all_values):
@@ -439,7 +497,11 @@ def generate_robustness_summary_overall(all_values, all_demographics, output_fol
     # Group by metric for summary statistics
     summary_data = []
     
-    for struc in robustness_df['structure'].unique():
+    # Get all structures and sort them anatomically
+    all_structures = robustness_df['structure'].unique()
+    sorted_structures = sort_anatomical_structures(all_structures)
+    
+    for struc in sorted_structures:
         struc_data = robustness_df[robustness_df['structure'] == struc]
         for metric in struc_data['metric'].unique():
             metric_data = struc_data[struc_data['metric'] == metric]
@@ -521,7 +583,7 @@ def generate_robustness_summary_overall(all_values, all_demographics, output_fol
     
     # Plot 4: CV distribution by structure (boxplot)
     plt.subplot(2, 3, 4)
-    structures = robustness_df['structure'].unique()
+    structures = sort_anatomical_structures(robustness_df['structure'].unique())
     cv_data_by_structure = []
     structure_labels = []
     
@@ -550,7 +612,7 @@ def generate_robustness_summary_overall(all_values, all_demographics, output_fol
     # Plot 6: CV vs Number of measurements scatter
     plt.subplot(2, 3, 6)
     # Color by structure
-    unique_structures = robustness_df['structure'].unique()
+    unique_structures = sort_anatomical_structures(robustness_df['structure'].unique())
     colors = plt.cm.tab10(np.linspace(0, 1, len(unique_structures)))
     for i, structure in enumerate(unique_structures):
         struct_data = robustness_df[robustness_df['structure'] == structure]
@@ -586,35 +648,22 @@ def generate_robustness_summary_overall(all_values, all_demographics, output_fol
     
 
 
-def categorize_age_groups(age, method='terciles'):
+def categorize_age_groups(age):
     """
     Categorize age into groups.
     
     Args:
         age: Age value or list of ages
-        method: 'terciles', 'decades', or 'custom'
     
     Returns:
         Age group label
     """
-    if method == 'decades':
-        if age < 30:
-            return 'Young (18-29)'
-        elif age < 50:
-            return 'Middle (30-49)'
-        elif age < 65:
-            return 'Mature (50-64)'
-        else:
-            return 'Senior (65+)'
-    elif method == 'custom':
-        if age < 40:
-            return 'Young (<40)'
-        elif age < 60:
-            return 'Middle (40-59)'
-        else:
-            return 'Older (60+)'
-    else:  # terciles - will be determined from data
-        return age  # Return raw age for later tercile calculation
+    if age < 40:
+        return '18-39'
+    elif age < 60:
+        return '40-59'
+    else:
+        return '60+'
 
 
 def group_data_by_demographics(all_values, all_demographics):
@@ -644,18 +693,14 @@ def group_data_by_demographics(all_values, all_demographics):
                 values = all_values[struc][struc_name][metric]
                 demographics = all_demographics[struc][struc_name][metric]
                 
-                # Extract ages for tercile calculation
-                ages = [demo['age'] for demo in demographics]
-                age_terciles = np.percentile(ages, [33.33, 66.67])
-                
                 # Group data
                 group_data = {
-                    'Male_Young': {'values': [], 'demographics': []},
-                    'Male_Middle': {'values': [], 'demographics': []},
-                    'Male_Older': {'values': [], 'demographics': []},
-                    'Female_Young': {'values': [], 'demographics': []},
-                    'Female_Middle': {'values': [], 'demographics': []},
-                    'Female_Older': {'values': [], 'demographics': []}
+                    'Male_18-39': {'values': [], 'demographics': []},
+                    'Male_40-59': {'values': [], 'demographics': []},
+                    'Male_60+': {'values': [], 'demographics': []},
+                    'Female_18-39': {'values': [], 'demographics': []},
+                    'Female_40-59': {'values': [], 'demographics': []},
+                    'Female_60+': {'values': [], 'demographics': []}
                 }
                 
                 for val, demo in zip(values, demographics):
@@ -663,13 +708,8 @@ def group_data_by_demographics(all_values, all_demographics):
                     sex = sex_dict[demo['sex']]
                     
                     # Determine age group
-                    if age <= age_terciles[0]:
-                        age_group = 'Young'
-                    elif age <= age_terciles[1]:
-                        age_group = 'Middle'
-                    else:
-                        age_group = 'Older'
-                    
+                    age_group = categorize_age_groups(age)
+
                     # Create group key
                     group_key = f"{sex}_{age_group}"
                     
@@ -756,16 +796,18 @@ def plot_metrics_by_groups(grouped_data, robustness_data, output_folder):
     
     # Define colors for groups
     color_map = {
-        'Male_Young': "#1f77b4",
-        'Male_Middle': '#ff7f0e', 
-        'Male_Older': '#2ca02c',
-        'Female_Young': '#d62728',
-        'Female_Middle': '#9467bd',
-        'Female_Older': '#8c564b'
+        'Male_18-39': "#1f77b4",
+        'Male_40-59': '#ff7f0e', 
+        'Male_60+': '#2ca02c',
+        'Female_18-39': '#d62728',
+        'Female_40-59': '#9467bd',
+        'Female_60+': '#8c564b'
     }
-    
-    groups = ['Male_Young', 'Male_Middle', 'Male_Older', 
-              'Female_Young', 'Female_Middle', 'Female_Older']
+
+    groups = [
+        'Male_18-39', 'Male_40-59', 'Male_60+',
+        'Female_18-39', 'Female_40-59', 'Female_60+'
+    ]
     
     # Create plots for each metric
     for struc in grouped_data.keys():
@@ -777,16 +819,20 @@ def plot_metrics_by_groups(grouped_data, robustness_data, output_folder):
                 if metric in grouped_data[struc][struc_name]:
                     structure_levels.append(struc_name)
             
+            # Sort structures in anatomical order
+            structure_levels = sort_anatomical_structures(structure_levels)
+            
             # Create subplot grid for this metric      
             fig, ax = plt.subplots(1, 1)
             
             fig.suptitle(f'Structure {struc} - Metric: {metric}', fontsize=16, y=0.98)
                             
             # Prepare data for line plot with error bars
-            plot_data = {group: {'means': [], 'stds': [], 'levels': []} for group in groups}
-            
+            plot_data = {}
             for level in structure_levels:
                 for group in groups:
+                    if not group in plot_data:
+                        plot_data[group] = {'means': [], 'stds': [], 'levels': []}
                     values = grouped_data[struc][level][metric][group]['values']
                     if values:
                         plot_data[group]['means'].append(np.mean(values))
@@ -799,7 +845,7 @@ def plot_metrics_by_groups(grouped_data, robustness_data, output_folder):
                 
                 # Plot lines with error bars for each group
                 x_positions = range(len(structure_levels))
-                
+
             for group in groups:
                 if plot_data[group]['means']:
                     means = plot_data[group]['means']
@@ -829,7 +875,7 @@ def plot_metrics_by_groups(grouped_data, robustness_data, output_folder):
             ax.legend(bbox_to_anchor=(1.05, 1), loc='best')
             
             plt.tight_layout()
-            plt.savefig(output_folder / f'metric_{metric}_by_levels_and_groups.png', 
+            plt.savefig(output_folder / f'metric_{struc}_{metric}_by_levels_and_groups.png', 
                     dpi=300, bbox_inches='tight')
             plt.close()
             
@@ -874,8 +920,8 @@ def plot_metrics_by_groups(grouped_data, robustness_data, output_folder):
                 ax = axes[idx] if n_metrics > 1 else axes[0]
                 
                 # Get all levels for this structure
-                all_levels = sorted([sn for sn in grouped_data[struc].keys() 
-                                   if metric in grouped_data[struc][sn]])
+                all_levels = sort_anatomical_structures([sn for sn in grouped_data[struc].keys() 
+                                                       if metric in grouped_data[struc][sn]])
                 
                 # Plot similar to above but for all levels
                 x_positions = range(len(all_levels))
