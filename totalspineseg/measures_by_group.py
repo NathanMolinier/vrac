@@ -52,6 +52,10 @@ def main():
     # Align canal and CSF for control group
     # all_values = rescale_canal(all_values)
 
+    # OVERALL ROBUSTNESS ANALYSIS (not grouped by demographics)
+    print("Starting overall robustness analysis...")
+    generate_robustness_summary_overall(all_values, all_demographics, output_folder)
+
     # GROUP ANALYSIS AND ROBUSTNESS EVALUATION
     print("Starting demographic group analysis and robustness evaluation...")
     
@@ -78,6 +82,7 @@ def main():
     
     print(f"Analysis complete! Results saved to {output_folder}")
     print(f"Check the following files:")
+    print(f"  - Overall robustness: {output_folder}/overall_robustness_summary_plots.png")
     print(f"  - Individual metric plots: {output_folder}/*_by_groups.png")
     print(f"  - Robustness summary: {output_folder}/robustness_summary.png")
     print(f"  - Statistical comparisons: {output_folder}/statistical_comparisons.csv")
@@ -200,17 +205,18 @@ def compute_foramens_metrics(data_dict):
         if not top_vertebra in data_dict['vertebrae']:
             data_dict['foramens'][struc_name]['right_surface'] = -1
             data_dict['foramens'][struc_name]['left_surface'] = -1
-            data_dict['foramens'][struc_name]['asymmetry R/L'] = -1
+            data_dict['foramens'][struc_name]['asymmetry_R-L'] = -1
         else:
             # Normalize foramen surfaces with top vertebra AP thickness
             for surface in ['right_surface', 'left_surface']:
-                data_dict['foramens'][struc_name][surface] = data_dict['foramens'][struc_name][surface] / (data_dict['vertebrae'][top_vertebra]['AP_thickness']*data_dict['vertebrae'][top_vertebra]['median_thickness'])
+                if data_dict['foramens'][struc_name][surface] != -1:
+                    data_dict['foramens'][struc_name][surface] = data_dict['foramens'][struc_name][surface] / (data_dict['vertebrae'][top_vertebra]['AP_thickness']*data_dict['vertebrae'][top_vertebra]['median_thickness'])
 
             # Create asymmetry quotient
             if data_dict['foramens'][struc_name]['right_surface'] != -1 and data_dict['foramens'][struc_name]['left_surface'] != -1 and data_dict['foramens'][struc_name]['left_surface'] != 0:
-                data_dict['foramens'][struc_name]['asymmetry R/L'] = data_dict['foramens'][struc_name]['right_surface'] / data_dict['foramens'][struc_name]['left_surface']
+                data_dict['foramens'][struc_name]['asymmetry_R-L'] = data_dict['foramens'][struc_name]['right_surface'] / data_dict['foramens'][struc_name]['left_surface']
             else:
-                data_dict['foramens'][struc_name]['asymmetry R/L'] = -1
+                data_dict['foramens'][struc_name]['asymmetry_R-L'] = -1
     return data_dict
 
 def compute_vertebrae_metrics(data_dict):
@@ -344,6 +350,241 @@ def create_dict_from_subject_data(subject_data, intensity_profile=True):
                 struc_dict[column] = struc_data[column][struc_idx]
         subject_dict[struc] = struc_dict
     return subject_dict
+
+def calculate_robustness_metrics_overall(all_values, all_demographics):
+    """
+    Calculate robustness metrics for subjects with multiple measurements across all data.
+    
+    Args:
+        all_values: Dictionary with structure {struc: {struc_name: {metric: [values]}}}
+        all_demographics: Dictionary with structure {struc: {struc_name: {metric: [demographics]}}}
+        
+    Returns:
+        DataFrame with robustness metrics per subject, structure, and metric
+    """
+    robustness_data = []
+    
+    for struc in all_values.keys():
+        for struc_name in all_values[struc].keys():
+            for metric in all_values[struc][struc_name].keys():
+                if metric in ['discs_gap', 'slice_interp']:  # Skip non-metric data
+                    continue
+                    
+                values = all_values[struc][struc_name][metric]
+                demographics = all_demographics[struc][struc_name][metric]
+                
+                # Group by subject (participant_id)
+                subject_values = {}
+                for val, demo in zip(values, demographics):
+                    subj_id = demo['participant_id']
+                    if subj_id not in subject_values:
+                        subject_values[subj_id] = []
+                    subject_values[subj_id].append(val)
+                
+                # Calculate robustness for subjects with multiple measurements
+                for subj_id, subj_vals in subject_values.items():
+                    if len(subj_vals) > 1:  # Multiple measurements
+                        subj_vals = np.array(subj_vals)
+                        subj_vals = subj_vals[~np.isnan(subj_vals)]  # Remove NaN
+                        
+                        if len(subj_vals) > 1:
+                            mean_val = np.mean(subj_vals)
+                            std_val = np.std(subj_vals)
+                            cv = (std_val / mean_val) * 100 if mean_val != 0 else np.nan
+                            min_val = np.min(subj_vals)
+                            max_val = np.max(subj_vals)
+                            range_val = max_val - min_val
+                            relative_range = (range_val / mean_val) * 100 if mean_val != 0 else np.nan
+                            
+                            robustness_data.append({
+                                'structure': struc,
+                                'structure_name': struc_name,
+                                'metric': metric,
+                                'subject': subj_id,
+                                'n_measurements': len(subj_vals),
+                                'mean': mean_val,
+                                'std': std_val,
+                                'cv_percent': cv,
+                                'min': min_val,
+                                'max': max_val,
+                                'range': range_val,
+                                'relative_range_percent': relative_range,
+                                'measurements': subj_vals.tolist()
+                            })
+    
+    return pd.DataFrame(robustness_data)
+
+
+def generate_robustness_summary_overall(all_values, all_demographics, output_folder):
+    """
+    Generate comprehensive summary statistics for robustness analysis (not grouped by demographics).
+    
+    Args:
+        all_values: Dictionary with structure {struc: {struc_name: {metric: [values]}}}
+        all_demographics: Dictionary with structure {struc: {struc_name: {metric: [demographics]}}}
+        output_folder: Path to save summary files
+    """
+    output_folder = Path(output_folder)
+    output_folder.mkdir(exist_ok=True)
+    
+    # Calculate overall robustness metrics
+    robustness_df = calculate_robustness_metrics_overall(all_values, all_demographics)
+    
+    if robustness_df.empty:
+        print("No subjects with multiple measurements found for robustness analysis")
+        return
+    
+    print(f"Found {len(robustness_df)} subjects with multiple measurements for robustness analysis")
+    
+    # Group by metric for summary statistics
+    summary_data = []
+    
+    for struc in robustness_df['structure'].unique():
+        struc_data = robustness_df[robustness_df['structure'] == struc]
+        for metric in struc_data['metric'].unique():
+            metric_data = struc_data[struc_data['metric'] == metric]
+
+            overall_stats = {
+                'struc': struc,
+                'metric': metric,
+                'n_subjects_with_multiple': len(metric_data),
+                'total_measurements': metric_data['n_measurements'].sum(),
+                'mean_cv_percent': metric_data['cv_percent'].mean(),
+                'median_cv_percent': metric_data['cv_percent'].median(),
+                'std_cv_percent': metric_data['cv_percent'].std(),
+                'mean_relative_range_percent': metric_data['relative_range_percent'].mean(),
+                'median_relative_range_percent': metric_data['relative_range_percent'].median(),
+                'subjects_with_high_variability_cv_20': (metric_data['cv_percent'] > 20).sum(),
+                'subjects_with_low_variability_cv_5': (metric_data['cv_percent'] < 5).sum()
+            }
+            summary_data.append(overall_stats)
+    
+    # Create overall summary table
+    summary_df = pd.DataFrame(summary_data)
+    summary_df = summary_df.round(3)
+    # summary_df.to_csv(output_folder / 'overall_robustness_summary.csv', index=False)
+    
+    # Save detailed robustness data
+    # robustness_df.to_csv(output_folder / 'detailed_robustness_data.csv', index=False)
+    
+    # Print summary to console
+    print("\n" + "="*80)
+    print("OVERALL ROBUSTNESS ANALYSIS SUMMARY")
+    print("="*80)
+    print(summary_df.to_string(index=False))
+    print("\n" + "="*80)
+    
+    # Create summary visualization
+    plt.figure(figsize=(18, 12))
+    
+    # Plot 1: CV comparison across structures and metrics
+    plt.subplot(2, 3, 1)
+    # Create combined labels for structure-metric combinations
+    summary_df['struc_metric'] = summary_df['struc'] + '_' + summary_df['metric']
+    cv_means = summary_df['mean_cv_percent']
+    bars = plt.bar(range(len(cv_means)), cv_means)
+    plt.xticks(range(len(cv_means)), summary_df['struc_metric'], rotation=45, ha='right')
+    plt.ylabel('Mean CV (%)')
+    plt.title('Mean Coefficient of Variation by Structure-Metric')
+    plt.grid(True, alpha=0.3)
+    
+    # Color bars by CV level
+    for bar, cv in zip(bars, cv_means):
+        if cv < 10:
+            bar.set_color('green')
+        elif cv < 20:
+            bar.set_color('orange')
+        else:
+            bar.set_color('red')
+    
+    # Plot 2: Number of subjects with multiple measurements
+    plt.subplot(2, 3, 2)
+    plt.bar(range(len(summary_df)), summary_df['n_subjects_with_multiple'])
+    plt.xticks(range(len(summary_df)), summary_df['struc_metric'], rotation=45, ha='right')
+    plt.ylabel('Number of Subjects')
+    plt.title('Subjects with Multiple Measurements')
+    plt.grid(True, alpha=0.3)
+    
+    # Plot 3: High vs Low variability subjects
+    plt.subplot(2, 3, 3)
+    x = np.arange(len(summary_df))
+    width = 0.35
+    plt.bar(x - width/2, summary_df['subjects_with_high_variability_cv_20'], 
+            width, label='High variability (CV>20%)', alpha=0.7, color='red')
+    plt.bar(x + width/2, summary_df['subjects_with_low_variability_cv_5'], 
+            width, label='Low variability (CV<5%)', alpha=0.7, color='green')
+    plt.xticks(x, summary_df['struc_metric'], rotation=45, ha='right')
+    plt.ylabel('Number of Subjects')
+    plt.title('Variability Distribution')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    
+    # Plot 4: CV distribution by structure (boxplot)
+    plt.subplot(2, 3, 4)
+    structures = robustness_df['structure'].unique()
+    cv_data_by_structure = []
+    structure_labels = []
+    
+    for structure in structures:
+        struct_cv = robustness_df[robustness_df['structure'] == structure]['cv_percent'].dropna().values
+        if len(struct_cv) > 0:
+            cv_data_by_structure.append(struct_cv)
+            structure_labels.append(structure)
+    
+    if cv_data_by_structure:
+        plt.boxplot(cv_data_by_structure, labels=structure_labels)
+        plt.xticks(rotation=45, ha='right')
+        plt.ylabel('CV (%)')
+        plt.title('CV Distribution by Structure')
+        plt.grid(True, alpha=0.3)
+    
+    # Plot 5: Number of measurements distribution
+    plt.subplot(2, 3, 5)
+    n_meas_counts = robustness_df['n_measurements'].value_counts().sort_index()
+    plt.bar(n_meas_counts.index, n_meas_counts.values)
+    plt.xlabel('Number of Measurements')
+    plt.ylabel('Number of Subjects')
+    plt.title('Distribution of Measurement Counts')
+    plt.grid(True, alpha=0.3)
+    
+    # Plot 6: CV vs Number of measurements scatter
+    plt.subplot(2, 3, 6)
+    # Color by structure
+    unique_structures = robustness_df['structure'].unique()
+    colors = plt.cm.tab10(np.linspace(0, 1, len(unique_structures)))
+    for i, structure in enumerate(unique_structures):
+        struct_data = robustness_df[robustness_df['structure'] == structure]
+        plt.scatter(struct_data['n_measurements'], struct_data['cv_percent'], 
+                   alpha=0.6, label=structure, color=colors[i])
+    plt.xlabel('Number of Measurements')
+    plt.ylabel('CV (%)')
+    plt.title('CV vs Number of Measurements')
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    plt.savefig(output_folder / 'overall_robustness_summary_plots.png', 
+                dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    # Generate summary by structure and metric
+    structure_metric_summary = robustness_df.groupby(['structure', 'structure_name', 'metric']).agg({
+        'cv_percent': ['count', 'mean', 'median', 'std'],
+        'relative_range_percent': ['mean', 'median', 'std'],
+        'n_measurements': 'mean'
+    }).round(3)
+    
+    structure_metric_summary.columns = ['_'.join(col).strip() for col in structure_metric_summary.columns]
+    structure_metric_summary.to_csv(output_folder / 'robustness_by_structure_metric.csv')
+    
+    print(f"Overall robustness analysis saved to {output_folder}")
+    print(f"Generated files:")
+    print(f"  - Summary plots: overall_robustness_summary_plots.png")
+    print(f"  - Summary table: overall_robustness_summary.csv")
+    print(f"  - Detailed data: detailed_robustness_data.csv")
+    print(f"  - By structure/metric: robustness_by_structure_metric.csv")
+    
+
 
 def categorize_age_groups(age, method='terciles'):
     """
@@ -503,6 +744,7 @@ def calculate_robustness_metrics_by_group(grouped_data):
 def plot_metrics_by_groups(grouped_data, robustness_data, output_folder):
     """
     Create comprehensive plots showing metrics by age/sex groups with robustness analysis.
+    Organized by measurement and structure, with levels on x-axis, measurements on y-axis, and groups as hues.
     
     Args:
         grouped_data: Dictionary from group_data_by_demographics
@@ -512,105 +754,181 @@ def plot_metrics_by_groups(grouped_data, robustness_data, output_folder):
     output_folder = Path(output_folder)
     output_folder.mkdir(exist_ok=True)
     
+    # Define colors for groups
+    color_map = {
+        'Male_Young': "#1f77b4",
+        'Male_Middle': '#ff7f0e', 
+        'Male_Older': '#2ca02c',
+        'Female_Young': '#d62728',
+        'Female_Middle': '#9467bd',
+        'Female_Older': '#8c564b'
+    }
+    
+    groups = ['Male_Young', 'Male_Middle', 'Male_Older', 
+              'Female_Young', 'Female_Middle', 'Female_Older']
+    
+    # Create plots for each metric
     for struc in grouped_data.keys():
-        for struc_name in grouped_data[struc].keys():
-            metrics = [m for m in grouped_data[struc][struc_name].keys() 
-                      if m not in ['discs_gap', 'slice_interp']]
+        all_metrics = grouped_data[struc][list(grouped_data[struc].keys())[0]].keys()
+        for metric in all_metrics:
+            # Get all structures that have this metric
+            structure_levels = []
+            for struc_name in grouped_data[struc].keys():
+                if metric in grouped_data[struc][struc_name]:
+                    structure_levels.append(struc_name)
             
-            if not metrics:
-                continue
+            # Create subplot grid for this metric      
+            fig, ax = plt.subplots(1, 1)
             
-            # Create subplot grid
-            n_metrics = len(metrics)
+            fig.suptitle(f'Structure {struc} - Metric: {metric}', fontsize=16, y=0.98)
+                            
+            # Prepare data for line plot with error bars
+            plot_data = {group: {'means': [], 'stds': [], 'levels': []} for group in groups}
+            
+            for level in structure_levels:
+                for group in groups:
+                    values = grouped_data[struc][level][metric][group]['values']
+                    if values:
+                        plot_data[group]['means'].append(np.mean(values))
+                        plot_data[group]['stds'].append(np.std(values))
+                        plot_data[group]['levels'].append(level)
+                    else:
+                        plot_data[group]['means'].append(np.nan)
+                        plot_data[group]['stds'].append(np.nan)
+                        plot_data[group]['levels'].append(level)
+                
+                # Plot lines with error bars for each group
+                x_positions = range(len(structure_levels))
+                
+            for group in groups:
+                if plot_data[group]['means']:
+                    means = plot_data[group]['means']
+                    stds = plot_data[group]['stds']
+                    
+                    # Remove NaN values for plotting
+                    valid_indices = [i for i, m in enumerate(means) if not np.isnan(m)]
+                    if valid_indices:
+                        valid_x = [x_positions[i] for i in valid_indices]
+                        valid_means = [means[i] for i in valid_indices]
+                        valid_stds = [stds[i] for i in valid_indices]
+                        valid_levels = [structure_levels[i] for i in valid_indices]
+                        
+                        # Plot line with error bars
+                        ax.errorbar(valid_x, valid_means, yerr=valid_stds, 
+                                label=group.replace('_', ' '), 
+                                color=color_map[group], 
+                                marker='o', linewidth=2, markersize=6,
+                                capsize=5, capthick=2, alpha=0.8)
+                
+            # Formatting
+            ax.set_xticks(x_positions)
+            ax.set_xticklabels(structure_levels, rotation=45, ha='right')
+            ax.set_xlabel('Structure Level')
+            ax.set_ylabel(f'{metric}')
+            ax.grid(True, alpha=0.3)
+            ax.legend(bbox_to_anchor=(1.05, 1), loc='best')
+            
+            plt.tight_layout()
+            plt.savefig(output_folder / f'metric_{metric}_by_levels_and_groups.png', 
+                    dpi=300, bbox_inches='tight')
+            plt.close()
+            
+            print(f"Saved plot for metric: {metric}")
+    
+    # Also create a comprehensive overview plot with all metrics for one structure
+    for struc in grouped_data.keys():
+        # Get all structure names for this structure type
+        struc_names = list(grouped_data[struc].keys())
+        if not struc_names:
+            continue
+            
+        # Take the first structure name that has multiple metrics
+        best_struc_name = None
+        max_metrics = 0
+        for sn in struc_names:
+            metrics_count = len([m for m in grouped_data[struc][sn].keys() 
+                               if m not in ['discs_gap', 'slice_interp']])
+            if metrics_count > max_metrics:
+                max_metrics = metrics_count
+                best_struc_name = sn
+        
+        if best_struc_name and max_metrics > 1:
+            available_metrics = [m for m in grouped_data[struc][best_struc_name].keys() 
+                               if m not in ['discs_gap', 'slice_interp']]
+            
+            n_metrics = len(available_metrics)
             n_cols = min(3, n_metrics)
             n_rows = (n_metrics + n_cols - 1) // n_cols
             
-            fig, axes = plt.subplots(n_rows, n_cols, figsize=(5*n_cols, 4*n_rows))
+            fig, axes = plt.subplots(n_rows, n_cols, figsize=(6*n_cols, 5*n_rows))
             if n_metrics == 1:
                 axes = [axes]
             elif n_rows == 1:
-                axes = axes
+                axes = axes if n_metrics > 1 else [axes]
             else:
                 axes = axes.flatten()
             
-            for idx, metric in enumerate(metrics):
+            fig.suptitle(f'All Metrics for {struc}', fontsize=16, y=0.98)
+            
+            for idx, metric in enumerate(available_metrics):
                 ax = axes[idx] if n_metrics > 1 else axes[0]
                 
-                # Prepare data for plotting
-                plot_data = []
-                group_names = []
-                colors = []
+                # Get all levels for this structure
+                all_levels = sorted([sn for sn in grouped_data[struc].keys() 
+                                   if metric in grouped_data[struc][sn]])
                 
-                # Define colors for groups
-                color_map = {
-                    'Male_Young': "#1B6AA2",
-                    'Male_Middle': '#ff7f0e', 
-                    'Male_Older': '#2ca02c',
-                    'Female_Young': '#d62728',
-                    'Female_Middle': '#9467bd',
-                    'Female_Older': '#8c564b'
-                }
+                # Plot similar to above but for all levels
+                x_positions = range(len(all_levels))
                 
-                for group in ['Male_Young', 'Male_Middle', 'Male_Older', 
-                             'Female_Young', 'Female_Middle', 'Female_Older']:
-                    values = grouped_data[struc][struc_name][metric][group]['values']
-                    if values:
-                        plot_data.append(values)
-                        group_names.append(group.replace('_', '\n'))
-                        colors.append(color_map[group])
-                
-                if plot_data:
-                    # Box plot
-                    bp = ax.boxplot(plot_data, labels=group_names, patch_artist=True)
+                for group in groups:
+                    means = []
+                    stds = []
                     
-                    # Color the boxes
-                    for patch, color in zip(bp['boxes'], colors):
-                        patch.set_facecolor(color)
-                        patch.set_alpha(0.7)
-                    
-                    # Add individual points with jitter
-                    for i, (data, group) in enumerate(zip(plot_data, group_names)):
-                        x = np.random.normal(i+1, 0.04, len(data))
-                        ax.scatter(x, data, alpha=0.6, s=30, color=colors[i])
-                    
-                    ax.set_title(f'{metric}\n{struc_name} ({struc})')
-                    ax.set_ylabel('Value')
-                    ax.grid(True, alpha=0.3)
-                    ax.tick_params(axis='x', rotation=45)
-                    
-                    # Add robustness info as text
-                    robustness_info = robustness_data[struc][struc_name][metric]
-                    cv_means = []
-                    for group in ['Male_Young', 'Male_Middle', 'Male_Older', 
-                                 'Female_Young', 'Female_Middle', 'Female_Older']:
-                        if robustness_info[group]:
-                            cvs = [r['cv_percent'] for r in robustness_info[group] 
-                                  if not np.isnan(r['cv_percent'])]
-                            if cvs:
-                                cv_means.append(np.mean(cvs))
+                    for level in all_levels:
+                        if level in grouped_data[struc] and metric in grouped_data[struc][level]:
+                            values = grouped_data[struc][level][metric][group]['values']
+                            if values:
+                                means.append(np.mean(values))
+                                stds.append(np.std(values))
                             else:
-                                cv_means.append(np.nan)
+                                means.append(np.nan)
+                                stds.append(np.nan)
                         else:
-                            cv_means.append(np.nan)
+                            means.append(np.nan)
+                            stds.append(np.nan)
                     
-                    # Add text box with robustness info
-                    valid_cvs = [cv for cv in cv_means if not np.isnan(cv)]
-                    if valid_cvs:
-                        ax.text(0.02, 0.98, f'Mean CV: {np.mean(valid_cvs):.1f}%', 
-                               transform=ax.transAxes, fontsize=8,
-                               verticalalignment='top', bbox=dict(boxstyle='round', 
-                               facecolor='wheat', alpha=0.5))
+                    # Remove NaN values
+                    valid_indices = [i for i, m in enumerate(means) if not np.isnan(m)]
+                    if valid_indices:
+                        valid_x = [x_positions[i] for i in valid_indices]
+                        valid_means = [means[i] for i in valid_indices]
+                        valid_stds = [stds[i] for i in valid_indices]
+                        
+                        ax.errorbar(valid_x, valid_means, yerr=valid_stds, 
+                                   label=group.replace('_', ' '), 
+                                   color=color_map[group], 
+                                   marker='o', linewidth=2, markersize=6,
+                                   capsize=5, capthick=2, alpha=0.8)
+                
+                ax.set_xticks(x_positions)
+                ax.set_xticklabels(all_levels, rotation=45, ha='right')
+                ax.set_xlabel('Structure Level')
+                ax.set_ylabel(f'{metric}')
+                ax.set_title(f'{metric}')
+                ax.grid(True, alpha=0.3)
+                if idx == 0:  # Only add legend to first subplot
+                    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
             
             # Remove empty subplots
             for idx in range(n_metrics, len(axes)):
                 fig.delaxes(axes[idx])
             
             plt.tight_layout()
-            plt.savefig(output_folder / f'{struc}_{struc_name}_by_groups.png', 
+            plt.savefig(output_folder / f'{struc}_all_metrics_by_levels_and_groups.png', 
                        dpi=300, bbox_inches='tight')
             plt.close()
             
-            print(f"Saved plot for {struc} - {struc_name}")
+            print(f"Saved comprehensive plot for structure: {struc}")
 
 
 def plot_robustness_summary(robustness_data, output_folder):
