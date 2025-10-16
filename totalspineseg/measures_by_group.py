@@ -657,7 +657,7 @@ def generate_robustness_summary_overall(all_values, all_demographics, output_fol
     }).round(3)
     
     structure_metric_summary.columns = ['_'.join(col).strip() for col in structure_metric_summary.columns]
-    structure_metric_summary.to_csv(output_folder / 'robustness_by_structure_metric.csv')
+    #structure_metric_summary.to_csv(output_folder / 'robustness_by_structure_metric.csv')
     
     print(f"Overall robustness analysis saved to {output_folder}")
     print(f"Generated files:")
@@ -1161,7 +1161,7 @@ def plot_robustness_summary(robustness_data, output_folder):
         'subject': 'nunique'
     }).round(3)
     
-    summary_stats.to_csv(output_folder / 'robustness_summary_stats.csv')
+    #summary_stats.to_csv(output_folder / 'robustness_summary_stats.csv')
     print(f"Robustness summary saved to {output_folder}")
 
 
@@ -1217,7 +1217,7 @@ def perform_statistical_analysis(grouped_data, output_folder):
     
     if results:
         results_df = pd.DataFrame(results)
-        results_df.to_csv(output_folder / 'statistical_comparisons.csv', index=False)
+        #results_df.to_csv(output_folder / 'statistical_comparisons.csv', index=False)
         
         # Summary of significant differences
         significant_results = results_df[results_df['significant']]
