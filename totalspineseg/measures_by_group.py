@@ -69,7 +69,7 @@ def sort_anatomical_structures(structure_list):
     return sorted(structure_list, key=get_sort_key)
 
 def main():
-    folder_path = Path('/home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/data/datasets/test-tss/lbp_sag_out/metrics_output')
+    folder_path = Path('/home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/data/datasets/test-tss/usf_sag_all_out/metrics_output')
     demographics_path = Path('/home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/data/datasets/lbp-lumbar-usf-2025/participants.tsv')
     output_folder = Path('images_by_group/')
 
