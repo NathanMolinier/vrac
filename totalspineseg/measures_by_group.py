@@ -268,12 +268,8 @@ def compute_discs_metrics(data_dict):
         if top_vertebra in data_dict['vertebrae']:
             # Normalize disc height with top vertebra AP_thickness
             data_dict['discs'][struc_name]['DHI'] = data_dict['discs'][struc_name]['median_thickness'] / data_dict['vertebrae'][top_vertebra]['AP_thickness']
-
-            # Normalize disc volume with top vertebra volume
-            data_dict['discs'][struc_name]['volume'] = data_dict['discs'][struc_name]['volume'] #/ data_dict['vertebrae'][top_vertebra]['AP_thickness']
         else:
             data_dict['discs'][struc_name]['DHI'] = -1
-            data_dict['discs'][struc_name]['volume'] = -1
     return data_dict
 
 def compute_foramens_metrics(data_dict):
