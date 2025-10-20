@@ -88,27 +88,26 @@ def main():
 
         # Gather all values for each metric and structures
         for struc in control_data.keys():
-            if struc not in ['spinalcord', 'canal', 'csf']:
-                for struc_name in control_data[struc].keys():
-                    if struc_name != 'spinalcord/canal':
-                        for metric in control_data[struc][struc_name].keys():
-                            # Add subject to all_values
-                            subject_value = control_data[struc][struc_name][metric]
-                            if subject_value != -1 and isinstance(sub_info['age'], (int, float)) and sub_info['sex'] in ['M', 'F']:
-                                if struc not in all_values:
-                                    all_values[struc] = {}
-                                    all_demographics[struc] = {}
-                                if struc_name not in all_values[struc]:
-                                    all_values[struc][struc_name] = {}
-                                    all_demographics[struc][struc_name] = {}
-                                if metric not in all_values[struc][struc_name]:
-                                    all_values[struc][struc_name][metric] = []
-                                    all_demographics[struc][struc_name][metric] = []
-                                all_values[struc][struc_name][metric].append(subject_value)
-                                all_demographics[struc][struc_name][metric].append(sub_info)
+            for struc_name in control_data[struc].keys():
+                if struc_name != 'spinalcord/canal':
+                    for metric in control_data[struc][struc_name].keys():
+                        # Add subject to all_values
+                        subject_value = control_data[struc][struc_name][metric]
+                        if subject_value != -1 and isinstance(sub_info['age'], (int, float)) and sub_info['sex'] in ['M', 'F']:
+                            if struc not in all_values:
+                                all_values[struc] = {}
+                                all_demographics[struc] = {}
+                            if struc_name not in all_values[struc]:
+                                all_values[struc][struc_name] = {}
+                                all_demographics[struc][struc_name] = {}
+                            if metric not in all_values[struc][struc_name]:
+                                all_values[struc][struc_name][metric] = []
+                                all_demographics[struc][struc_name][metric] = []
+                            all_values[struc][struc_name][metric].append(subject_value)
+                            all_demographics[struc][struc_name][metric].append(sub_info)
         
     # Align canal and CSF for control group
-    # all_values = rescale_canal(all_values)
+    all_values = rescale_canal(all_values)
 
     # OVERALL ROBUSTNESS ANALYSIS (not grouped by demographics)
     print("Starting overall robustness analysis...")
@@ -438,7 +437,7 @@ def calculate_robustness_metrics_overall(all_values, all_demographics):
     """
     robustness_data = []
     
-    for struc in all_values.keys():
+    for struc in ['discs', 'foramens', 'vertebrae']:
         for struc_name in all_values[struc].keys():
             for metric in all_values[struc][struc_name].keys():
                 if metric in ['discs_gap', 'slice_interp']:  # Skip non-metric data
@@ -485,6 +484,67 @@ def calculate_robustness_metrics_overall(all_values, all_demographics):
                                 'relative_range_percent': relative_range,
                                 'measurements': subj_vals.tolist()
                             })
+    
+    for struc in ['canal', 'csf']:
+        for struc_name in all_values[struc].keys():
+            for metric in all_values[struc][struc_name].keys():
+                if metric in ['discs_gap', 'slice_interp']:  # Skip non-metric data
+                    continue
+                    
+                values = all_values[struc][struc_name][metric]
+                slice_interp = all_values[struc][struc_name]['slice_interp']
+                demographics = all_demographics[struc][struc_name][metric]
+                
+                # Group by subject (participant_id)
+                subject_values = {}
+                for sl, val, demo in zip(slice_interp, values, demographics):
+                    subj_id = demo['participant_id']
+                    if subj_id not in subject_values:
+                        subject_values[subj_id] = {'slice_interp': [], 'values': []}
+                    subject_values[subj_id]['slice_interp'].append(sl)
+                    subject_values[subj_id]['values'].append(val)
+                
+                # Calculate robustness for subjects with multiple measurements
+                for subj_id, subj_data in subject_values.items():
+                    if len(subj_data['values']) > 1:  # Multiple measurements
+                        subj_vals = np.array(subj_data['values'])
+                        subj_slice = np.array(subj_data['slice_interp'])
+
+                        mean_list = []
+                        std_list = []
+                        for sl in range(np.min(subj_slice), np.max(subj_slice)+1):
+                            mask = len(subj_slice == sl)
+                            if len(mask) > 1:
+                                subj_vals = subj_vals[mask]  
+                                subj_vals = subj_vals[~np.isnan(subj_vals)]  # Remove NaN
+
+                                if len(subj_vals) > 1:
+                                    mean_list.append(np.mean(subj_vals))
+                                    std_list.append(np.std(subj_vals))
+
+                        mean_val = np.mean(mean_list) if mean_list else np.nan
+                        std_val = np.mean(std_list) if std_list else np.nan
+                        cv = (std_val / mean_val) * 100 if mean_val != 0 else np.nan
+                        min_val = np.min(mean_list)
+                        max_val = np.max(mean_list)
+                        range_val = max_val - min_val
+                        relative_range = (range_val / mean_val) * 100 if mean_val != 0 else np.nan
+                                    
+                        robustness_data.append({
+                            'structure': struc,
+                            'structure_name': struc_name,
+                            'metric': metric,
+                            'subject': subj_id,
+                            'n_measurements': len(subj_vals),
+                            'mean': mean_val,
+                            'std': std_val,
+                            'cv_percent': cv,
+                            'min': min_val,
+                            'max': max_val,
+                            'range': range_val,
+                            'relative_range_percent': relative_range,
+                            'measurements': subj_vals.tolist()
+                        })
     
     return pd.DataFrame(robustness_data)
 
