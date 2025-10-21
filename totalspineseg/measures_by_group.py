@@ -72,7 +72,7 @@ def sort_anatomical_structures(structure_list):
 def main():
     folder_path = Path('/home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/data/datasets/test-tss/usf_sag_all_out/metrics_output')
     demographics_path = Path('/home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/data/datasets/lbp-lumbar-usf-2025/participants.tsv')
-    tss_mapping = Path('/home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/code/totalspineseg/totalspineseg/resources/labels_maps/tss_map.json')
+    tss_mapping = Path('/home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/code/totalspineseg/totalspineseg/resources/labels_maps/levels_maps.json')
     output_folder = Path('images_by_group/')
 
     demographics = pd.read_csv(demographics_path, sep='\t')
@@ -123,6 +123,8 @@ def main():
     
     # Group data by demographics separately for sex and age
     grouped_by_sex, grouped_by_age = group_data_by_demographics(all_values, all_demographics)
+
+    all_values_df = group_canal_by_demographics(all_values, all_demographics)
     
     # Create output folders
     output_folder.mkdir(exist_ok=True)
@@ -138,6 +140,14 @@ def main():
     # Generate plots by age
     print("Generating plots by age...")
     plot_metrics_by_age(grouped_by_age, age_output_folder)
+    
+    # Generate canal plots by sex
+    print("Generating canal plots by sex...")
+    plot_canal_metrics_by_sex(all_values_df, discs_gap, last_disc, sex_output_folder)
+    
+    # Generate canal plots by age
+    print("Generating canal plots by age...")
+    plot_canal_metrics_by_age(all_values_df, discs_gap, last_disc, age_output_folder)
     
     # Calculate robustness metrics for both groupings
     robustness_data_sex = calculate_robustness_metrics_by_group(grouped_by_sex)
@@ -163,14 +173,48 @@ def main():
     print(f"  - Overall robustness: {output_folder}/overall_robustness_summary_plots.png")
     print(f"  - Sex-based analysis: {sex_output_folder}/")
     print(f"    * Combined metric plots: *_all_metrics_by_sex.png")
+    print(f"    * Canal/CSF plots: canal_all_metrics_by_sex.png, csf_all_metrics_by_sex.png")
     print(f"    * Robustness summary: robustness_summary.png")
     print(f"    * Statistical comparisons: statistical_comparisons.csv")
     print(f"  - Age-based analysis: {age_output_folder}/")
     print(f"    * Combined metric plots: *_all_metrics_by_age.png") 
+    print(f"    * Canal/CSF plots: canal_all_metrics_by_age.png, csf_all_metrics_by_age.png")
     print(f"    * Robustness summary: robustness_summary.png")
     print(f"    * Statistical comparisons: statistical_comparisons.csv")
 
     print()
+
+def group_canal_by_demographics(all_values, all_demographics):
+    new_values = copy.deepcopy(all_values)
+    for struc in ['canal', 'csf']:
+        for struc_name in new_values[struc].keys():
+            # Convert dict to dataframe with keys as columns and lines as subjects
+            # Prepare a dictionary where each key is a metric and each value is a list of values for all subjects
+            for i, metric in enumerate(all_values[struc][struc_name].keys()):
+                if metric not in ['discs_gap', 'slice_interp']:
+                    data = {'subjects' : [], 'values' : [], 'slice_interp' : [], 'sex': [], 'age': []}
+                    for j, subject_value in enumerate(all_values[struc][struc_name][metric]):
+                        if isinstance(subject_value, list):
+                            for value, slice_interp in zip(subject_value, all_values[struc][struc_name]['slice_interp'][j]):
+                                data['values'].append(value)
+                                data['slice_interp'].append(slice_interp)
+                                data['subjects'].append(f'subject_{j}')
+                                if all_demographics[struc][struc_name][metric][j]['sex'] == 'M':
+                                    data['sex'].append('Male')
+                                elif all_demographics[struc][struc_name][metric][j]['sex'] == 'F':
+                                    data['sex'].append('Female')
+                                else:
+                                    raise ValueError("Unexpected sex value encountered.")
+                                age_group = categorize_age_groups(all_demographics[struc][struc_name][metric][j]['age'])
+                                data['age'].append(age_group)
+                        else:
+                            raise ValueError("Expected list of values for canal/csf metrics.")
+                df = pd.DataFrame.from_dict(
+                    data,
+                    orient='index'
+                ).transpose()
+                new_values[struc][struc_name][metric] = df
+    return new_values
 
 def df_to_dict(df):
     idx = df['participant_id'].keys()[0]
@@ -843,7 +887,7 @@ def group_data_by_demographics(all_values, all_demographics):
     grouped_by_age = {}
     sex_dict = {'M': 'Male', 'F': 'Female'}
     
-    for struc in all_values.keys():
+    for struc in ['discs', 'foramens', 'vertebrae']:
         grouped_by_sex[struc] = {}
         grouped_by_age[struc] = {}
         
@@ -872,22 +916,22 @@ def group_data_by_demographics(all_values, all_demographics):
                     '60+': {'values': [], 'demographics': [], 'slice_interp': []}
                 }
                 
-                for val, demo in zip(values, demographics):
+                for idx, (val, demo) in enumerate(zip(values, demographics)):
                     age = demo['age']
                     sex = sex_dict[demo['sex']]
                     
                     # Add to sex groups
                     sex_groups[sex]['values'].append(val)
                     sex_groups[sex]['demographics'].append(demo)
-                    if slice_interp is not None:
-                        sex_groups[sex]['slice_interp'].append(slice_interp)
+                    if slice_interp is not None and idx < len(slice_interp):
+                        sex_groups[sex]['slice_interp'].append(slice_interp[idx])
 
                     # Add to age groups
                     age_group = categorize_age_groups(age)
                     age_groups[age_group]['values'].append(val)
                     age_groups[age_group]['demographics'].append(demo)
-                    if slice_interp is not None:
-                        age_groups[age_group]['slice_interp'].append(slice_interp)
+                    if slice_interp is not None and idx < len(slice_interp):
+                        age_groups[age_group]['slice_interp'].append(slice_interp[idx])
 
                 grouped_by_sex[struc][struc_name][metric] = sex_groups
                 grouped_by_age[struc][struc_name][metric] = age_groups
@@ -974,7 +1018,7 @@ def plot_metrics_by_sex(grouped_data, output_folder):
     groups = ['Male', 'Female']
     
     # Process each structure separately
-    for struc in grouped_data.keys():
+    for struc in ['discs', 'foramens', 'vertebrae']:
         # Get all metrics and structures for this structure type
         all_structures = list(grouped_data[struc].keys())
         if not all_structures:
@@ -1027,8 +1071,32 @@ def plot_metrics_by_sex(grouped_data, output_folder):
                     if level in grouped_data[struc] and metric in grouped_data[struc][level]:
                         values = grouped_data[struc][level][metric][group]['values']
                         if values:
-                            plot_data[group]['means'].append(np.mean(values))
-                            plot_data[group]['stds'].append(np.std(values))
+                            # Handle nested lists (canal/CSF data) vs single values (other structures)
+                            if isinstance(values[0], list):
+                                # Flatten nested lists for canal/CSF data
+                                flattened_values = []
+                                for val_list in values:
+                                    if isinstance(val_list, list):
+                                        flattened_values.extend([v for v in val_list if not np.isnan(v) and v != -1])
+                                    else:
+                                        if not np.isnan(val_list) and val_list != -1:
+                                            flattened_values.append(val_list)
+                                
+                                if flattened_values:
+                                    plot_data[group]['means'].append(np.mean(flattened_values))
+                                    plot_data[group]['stds'].append(np.std(flattened_values))
+                                else:
+                                    plot_data[group]['means'].append(np.nan)
+                                    plot_data[group]['stds'].append(np.nan)
+                            else:
+                                # Handle single values for other structures
+                                clean_values = [v for v in values if not np.isnan(v) and v != -1]
+                                if clean_values:
+                                    plot_data[group]['means'].append(np.mean(clean_values))
+                                    plot_data[group]['stds'].append(np.std(clean_values))
+                                else:
+                                    plot_data[group]['means'].append(np.nan)
+                                    plot_data[group]['stds'].append(np.nan)
                             plot_data[group]['levels'].append(level)
                         else:
                             plot_data[group]['means'].append(np.nan)
@@ -1100,7 +1168,7 @@ def plot_metrics_by_age(grouped_data, output_folder):
     groups = ['18-39', '40-59', '60+']
     
     # Process each structure separately
-    for struc in grouped_data.keys():
+    for struc in ['discs', 'foramens', 'vertebrae']:
         # Get all metrics and structures for this structure type
         all_structures = list(grouped_data[struc].keys())
         if not all_structures:
@@ -1153,8 +1221,32 @@ def plot_metrics_by_age(grouped_data, output_folder):
                     if level in grouped_data[struc] and metric in grouped_data[struc][level]:
                         values = grouped_data[struc][level][metric][group]['values']
                         if values:
-                            plot_data[group]['means'].append(np.mean(values))
-                            plot_data[group]['stds'].append(np.std(values))
+                            # Handle nested lists (canal/CSF data) vs single values (other structures)
+                            if isinstance(values[0], list):
+                                # Flatten nested lists for canal/CSF data
+                                flattened_values = []
+                                for val_list in values:
+                                    if isinstance(val_list, list):
+                                        flattened_values.extend([v for v in val_list if not np.isnan(v) and v != -1])
+                                    else:
+                                        if not np.isnan(val_list) and val_list != -1:
+                                            flattened_values.append(val_list)
+                                
+                                if flattened_values:
+                                    plot_data[group]['means'].append(np.mean(flattened_values))
+                                    plot_data[group]['stds'].append(np.std(flattened_values))
+                                else:
+                                    plot_data[group]['means'].append(np.nan)
+                                    plot_data[group]['stds'].append(np.nan)
+                            else:
+                                # Handle single values for other structures
+                                clean_values = [v for v in values if not np.isnan(v) and v != -1]
+                                if clean_values:
+                                    plot_data[group]['means'].append(np.mean(clean_values))
+                                    plot_data[group]['stds'].append(np.std(clean_values))
+                                else:
+                                    plot_data[group]['means'].append(np.nan)
+                                    plot_data[group]['stds'].append(np.nan)
                             plot_data[group]['levels'].append(level)
                         else:
                             plot_data[group]['means'].append(np.nan)
@@ -1203,6 +1295,193 @@ def plot_metrics_by_age(grouped_data, output_folder):
         plt.close()
         
         print(f"Saved age plot for structure: {struc}")
+
+
+def plot_canal_metrics_by_sex(all_values_df, discs_gap, last_disc, output_folder):
+    """
+    Create plots showing canal metrics by sex groups using seaborn lineplot.
+    
+    Args:
+        grouped_data: Dictionary grouped by sex from group_data_by_demographics
+        discs_gap: Gap between discs in slice indices
+        last_disc: Name of the last disc
+        output_folder: Path to save plots
+    """
+    output_folder = Path(output_folder)
+    output_folder.mkdir(exist_ok=True)
+    
+    # Define colors for sex groups
+    color_map = {
+        'Male': "#1f77b4",
+        'Female': '#d62728'
+    }
+    
+    metrics_dict = {
+            'discs': ['median_thickness', 'DHI', 'volume', 'eccentricity', 'solidity'],
+            'vertebrae': ['median_thickness', 'AP_thickness', 'volume'],
+            'foramens': ['right_surface', 'left_surface', 'asymmetry_R-L'],
+            'canal': ['area', 'diameter_AP', 'diameter_RL', 'eccentricity', 'solidity'],
+        }
+    
+    # Process canal and CSF structures
+    for struc in ['canal']:
+        all_metrics = metrics_dict[struc]
+        
+        # Create subplot grid - one subplot per metric
+        n_metrics = len(all_metrics)
+        n_cols = min(3, n_metrics)
+        n_rows = (n_metrics + n_cols - 1) // n_cols
+        
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(8*n_cols, 6*n_rows))
+        if n_metrics == 1:
+            axes = [axes]
+        elif n_rows == 1:
+            axes = axes if n_metrics > 1 else [axes]
+        else:
+            axes = axes.flatten()
+        
+        fig.suptitle(f'Structure {struc} - All Metrics by Sex', fontsize=16, y=0.98)
+        
+        for idx, metric in enumerate(all_metrics):
+            ax = axes[idx] if n_metrics > 1 else axes[0]
+            
+            # Keep lines with metrics line equal to metric
+            all_values_data = all_values_df[struc]['canal'][metric]
+            
+            # Use seaborn line plot
+            sns.lineplot(
+                x='slice_interp', 
+                y='values', 
+                hue='sex', 
+                data=all_values_data, 
+                palette=color_map,
+                ax=ax, 
+                errorbar='sd')
+                
+            # Generate disc positions for x-axis labels
+            disc = last_disc
+            top_pos = 0
+            nb_discs = all_values_data['slice_interp'].max()//discs_gap
+
+            for i in range(nb_discs+1):
+                top_vert = disc.split('-')[0]
+                ax.axvline(x=top_pos, color='gray', linestyle='--', alpha=0.5)
+                ax.text(top_pos + discs_gap//2, ax.get_ylim()[1], top_vert, verticalalignment='bottom', horizontalalignment='center', fontsize=12, color='black', alpha=0.7)
+                top_pos += discs_gap
+                disc = previous_structure(disc)
+
+            # Formatting
+            #ax.set_xlabel('Disc Level')
+            ax.set_ylabel(f'{metric}')
+            #ax.set_title(f'{metric}')
+            ax.grid(True, alpha=0.3)
+            if idx == 0:  # Only add legend to first subplot
+                ax.legend(title='Sex')
+
+        
+        # Remove empty subplots
+        for idx in range(n_metrics, len(axes)):
+            fig.delaxes(axes[idx])
+        
+        plt.tight_layout()
+        plt.savefig(output_folder / f'{struc}_all_metrics_by_sex.png', 
+                   dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        print(f"Saved sex canal plot for structure: {struc}")
+
+
+def plot_canal_metrics_by_age(all_values_df, discs_gap, last_disc, output_folder):
+    """
+    Create plots showing canal metrics by age groups using seaborn lineplot.
+    
+    Args:
+        grouped_data: Dictionary grouped by age from group_data_by_demographics
+        discs_gap: Gap between discs in slice indices
+        last_disc: Name of the last disc
+        output_folder: Path to save plots
+    """
+    output_folder = Path(output_folder)
+    output_folder.mkdir(exist_ok=True)
+    
+    # Define colors for age groups
+    color_map = {
+        '18-39': "#2ca02c",
+        '40-59': '#ff7f0e',
+        '60+': '#9467bd'
+    }
+    metrics_dict = {
+        'discs': ['median_thickness', 'DHI', 'volume', 'eccentricity', 'solidity'],
+        'vertebrae': ['median_thickness', 'AP_thickness', 'volume'],
+        'foramens': ['right_surface', 'left_surface', 'asymmetry_R-L'],
+        'canal': ['area', 'diameter_AP', 'diameter_RL', 'eccentricity', 'solidity'],
+    }
+        
+    # Process canal and CSF structures
+    for struc in ['canal']:
+        all_metrics = metrics_dict[struc]
+        
+        # Create subplot grid - one subplot per metric
+        n_metrics = len(all_metrics)
+        n_cols = min(3, n_metrics)
+        n_rows = (n_metrics + n_cols - 1) // n_cols
+        
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(8*n_cols, 6*n_rows))
+        if n_metrics == 1:
+            axes = [axes]
+        elif n_rows == 1:
+            axes = axes if n_metrics > 1 else [axes]
+        else:
+            axes = axes.flatten()
+        
+        fig.suptitle(f'Structure {struc} - All Metrics by Sex', fontsize=16, y=0.98)
+        
+        for idx, metric in enumerate(all_metrics):
+            ax = axes[idx] if n_metrics > 1 else axes[0]
+            
+            # Keep lines with metrics line equal to metric
+            all_values_data = all_values_df[struc]['canal'][metric]
+            
+            # Use seaborn line plot
+            sns.lineplot(
+                x='slice_interp', 
+                y='values', 
+                hue='age', 
+                data=all_values_data, 
+                palette=color_map,
+                ax=ax, 
+                errorbar='sd')
+                
+            # Generate disc positions for x-axis labels
+            disc = last_disc
+            top_pos = 0
+            nb_discs = all_values_data['slice_interp'].max()//discs_gap
+
+            for i in range(nb_discs+1):
+                top_vert = disc.split('-')[0]
+                ax.axvline(x=top_pos, color='gray', linestyle='--', alpha=0.5)
+                ax.text(top_pos + discs_gap//2, ax.get_ylim()[1], top_vert, verticalalignment='bottom', horizontalalignment='center', fontsize=12, color='black', alpha=0.7)
+                top_pos += discs_gap
+                disc = previous_structure(disc)
+                
+            # Formatting
+            #ax.set_xlabel('Disc Level')
+            ax.set_ylabel(f'{metric}')
+            #ax.set_title(f'{metric}')
+            ax.grid(True, alpha=0.3)
+            if idx == 0:  # Only add legend to first subplot
+                ax.legend(title='Age Group')
+        
+        # Remove empty subplots
+        for idx in range(n_metrics, len(axes)):
+            fig.delaxes(axes[idx])
+        
+        plt.tight_layout()
+        plt.savefig(output_folder / f'{struc}_all_metrics_by_age.png', 
+                   dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        print(f"Saved age canal plot for structure: {struc}")
 
 
 def plot_robustness_summary(robustness_data, output_folder):
