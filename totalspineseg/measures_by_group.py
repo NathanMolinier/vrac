@@ -1366,12 +1366,15 @@ def plot_canal_metrics_by_sex(all_values_df, discs_gap, last_disc, output_folder
             for i in range(nb_discs+1):
                 top_vert = disc.split('-')[0]
                 ax.axvline(x=top_pos, color='gray', linestyle='--', alpha=0.5)
-                ax.text(top_pos + discs_gap//2, ax.get_ylim()[1], top_vert, verticalalignment='bottom', horizontalalignment='center', fontsize=12, color='black', alpha=0.7)
+                ax.text(top_pos + discs_gap//2, ax.get_ylim()[0], top_vert, verticalalignment='bottom', horizontalalignment='center', fontsize=12, color='black', alpha=0.7)
                 top_pos += discs_gap
                 disc = previous_structure(disc)
+            
+            ax.set_xticks([])
+            ax.set_xticklabels([])  # Hide x-tick labels to avoid clutter
 
             # Formatting
-            #ax.set_xlabel('Disc Level')
+            ax.set_xlabel('Disc Level')
             ax.set_ylabel(f'{metric}')
             #ax.set_title(f'{metric}')
             ax.grid(True, alpha=0.3)
@@ -1460,12 +1463,15 @@ def plot_canal_metrics_by_age(all_values_df, discs_gap, last_disc, output_folder
             for i in range(nb_discs+1):
                 top_vert = disc.split('-')[0]
                 ax.axvline(x=top_pos, color='gray', linestyle='--', alpha=0.5)
-                ax.text(top_pos + discs_gap//2, ax.get_ylim()[1], top_vert, verticalalignment='bottom', horizontalalignment='center', fontsize=12, color='black', alpha=0.7)
+                ax.text(top_pos + discs_gap//2, ax.get_ylim()[0], top_vert, verticalalignment='bottom', horizontalalignment='center', fontsize=12, color='black', alpha=0.7)
                 top_pos += discs_gap
                 disc = previous_structure(disc)
-                
+            
+            ax.set_xticks([])
+            ax.set_xticklabels([])  # Hide x-tick labels to avoid clutter
+
             # Formatting
-            #ax.set_xlabel('Disc Level')
+            ax.set_xlabel('Disc Level')
             ax.set_ylabel(f'{metric}')
             #ax.set_title(f'{metric}')
             ax.grid(True, alpha=0.3)
