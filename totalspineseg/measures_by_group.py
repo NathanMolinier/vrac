@@ -574,16 +574,33 @@ def calculate_robustness_metrics_overall(all_values, all_demographics):
                 # Calculate robustness for subjects with multiple measurements
                 for subj_id, subj_data in subject_values.items():
                     if len(subj_data['values']) > 1:  # Multiple measurements
-                        subj_vals = np.array(subj_data['values'])
-                        subj_slice = np.array(subj_data['slice_interp'])
+                        # Flatten the nested lists and create corresponding slice indices
+                        all_vals = []
+                        all_slices = []
+                        
+                        for session_vals, session_slices in zip(subj_data['values'], subj_data['slice_interp']):
+                            # Handle case where session_vals might be a single value or a list
+                            if isinstance(session_vals, list):
+                                all_vals.extend(session_vals)
+                                all_slices.extend(session_slices)
+                            else:
+                                all_vals.append(session_vals)
+                                all_slices.append(session_slices)
+                        
+                        subj_vals = np.array(all_vals)
+                        subj_slice = np.array(all_slices)
+                        
+                        if len(subj_vals) == 0:
+                            continue
+                        
                         min_slice = np.min(subj_slice)
                         max_slice = np.max(subj_slice)
 
                         mean_list = []
                         std_list = []
-                        for sl in range(np.min(subj_slice), np.max(subj_slice)+1):
+                        for sl in range(min_slice, max_slice + 1):
                             mask = subj_slice == sl
-                            if len(mask) > 1:
+                            if np.sum(mask) > 1:  # More than one measurement at this slice
                                 subj_val = subj_vals[mask]  
                                 subj_val = subj_val[~np.isnan(subj_val)]  # Remove NaN
 
@@ -593,11 +610,11 @@ def calculate_robustness_metrics_overall(all_values, all_demographics):
 
                         mean_val = np.mean(mean_list) if mean_list else np.nan
                         std_val = np.mean(std_list) if std_list else np.nan
-                        cv = (std_val / mean_val) * 100 if mean_val != 0 else np.nan
-                        min_val = np.min(mean_list)
-                        max_val = np.max(mean_list)
-                        range_val = max_val - min_val
-                        relative_range = (range_val / mean_val) * 100 if mean_val != 0 else np.nan
+                        cv = (std_val / mean_val) * 100 if mean_val != 0 and not np.isnan(mean_val) else np.nan
+                        min_val = np.min(mean_list) if mean_list else np.nan
+                        max_val = np.max(mean_list) if mean_list else np.nan
+                        range_val = max_val - min_val if mean_list else np.nan
+                        relative_range = (range_val / mean_val) * 100 if mean_val != 0 and not np.isnan(mean_val) else np.nan
                                     
                         robustness_data.append({
                             'structure': struc,
