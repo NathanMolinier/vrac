@@ -9,6 +9,7 @@ import copy
 from pathlib import Path
 from sklearn.preprocessing import StandardScaler
 from scipy.stats import mannwhitneyu, kruskal
+import json
 
 def sort_anatomical_structures(structure_list):
     """
@@ -71,6 +72,7 @@ def sort_anatomical_structures(structure_list):
 def main():
     folder_path = Path('/home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/data/datasets/test-tss/usf_sag_all_out/metrics_output')
     demographics_path = Path('/home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/data/datasets/lbp-lumbar-usf-2025/participants.tsv')
+    tss_mapping = Path('/home/GRAMES.POLYMTL.CA/p118739/data_nvme_p118739/code/totalspineseg/totalspineseg/resources/labels_maps/tss_map.json')
     output_folder = Path('images_by_group/')
 
     demographics = pd.read_csv(demographics_path, sep='\t')
@@ -107,7 +109,10 @@ def main():
                             all_demographics[struc][struc_name][metric].append(sub_info)
         
     # Align canal and CSF for control group
-    all_values = rescale_canal(all_values)
+    with open(str(tss_mapping), 'r') as f:
+        mapping = json.load(f)
+        rev_mapping = {v: k for k, v in mapping.items()}
+    all_values, discs_gap, last_disc = rescale_canal(all_values, rev_mapping)
 
     # OVERALL ROBUSTNESS ANALYSIS (not grouped by demographics)
     print("Starting overall robustness analysis...")
@@ -301,65 +306,75 @@ def compute_vertebrae_metrics(data_dict):
     #             data_dict['vertebrae'][struc_name][metric] = data_dict['vertebrae'][struc_name][metric] / data_dict['vertebrae'][struc_name]['volume']
     return data_dict
 
-def rescale_canal(all_values):
+def rescale_canal(all_values, rev_mapping):
     '''
     Rescale subject canals and CSF based on discs z coordinates.
     '''
     new_values = copy.deepcopy(all_values)
+    struc = 'canal'
+    struc_name = 'canal'
+    # Align all metrics for each subject using discs level as references
+    disc_levels = all_values[struc][struc_name]['disc_level']
+    # Flatten the list of arrays and concatenate all unique values
+    all_discs = np.unique(np.concatenate([np.unique(dl) for dl in disc_levels]))
+    all_discs = all_discs[~np.isnan(all_discs)]
+
+    # For each subject count slices between discs
+    n_subjects = len(disc_levels)
+    gap_dict = {}
+    for subj_idx in range(n_subjects):
+        subj_disc_level = np.array(disc_levels[subj_idx])            
+        subj_valid = ~pd.isna(subj_disc_level)
+        subj_disc_positions = np.where(subj_valid)[0]
+        subj_disc_values = subj_disc_level[subj_valid]
+
+        # If the number of discs doesn't match, skip this subject
+        if len(subj_disc_values) < 2:
+            continue
+        
+        # Create dict with number of slice between discs
+        previous_disc = subj_disc_values[0]
+        previous_pos = subj_disc_positions[0]
+        for pos, disc in zip(subj_disc_positions[1:], subj_disc_values[1:]):
+            if f"{previous_disc}-{disc}" not in gap_dict:
+                gap_dict[f"{previous_disc}-{disc}"] = []
+            gap_dict[f"{previous_disc}-{disc}"].append(pos - previous_pos)
+            previous_disc = disc
+            previous_pos = pos
+
+    # Pick max for each gap between discs in gap_dict
+    gap_list = []
+    discs_list = []
+    for k, v in gap_dict.items():
+        gap_list.append(int(round(np.median(v))))
+        discs_list.append(k.split('-')[0])
+        discs_list.append(k.split('-')[1])
+    discs_list = [int(float(v)) for v in list(np.unique(discs_list))]
+    discs_gap = int(round(np.median(gap_list)))
+    last_disc = rev_mapping[max(discs_list)]
+
     for struc in ['canal', 'csf']:
         for struc_name in all_values[struc].keys():
-            # Align all metrics for each subject using discs level as references
-            disc_levels = all_values[struc][struc_name]['disc_level']
-            # Flatten the list of arrays and concatenate all unique values
-            all_discs = np.unique(np.concatenate([np.unique(dl) for dl in disc_levels]))
-            all_discs = all_discs[~np.isnan(all_discs)]
-
-            # For each subject count slices between discs
-            n_subjects = len(disc_levels)
-            gap_dict = {}
-            for subj_idx in range(n_subjects):
-                subj_disc_level = np.array(disc_levels[subj_idx])            
-                subj_valid = ~pd.isna(subj_disc_level)
-                subj_disc_positions = np.where(subj_valid)[0]
-                subj_disc_values = subj_disc_level[subj_valid]
-
-                # If the number of discs doesn't match, skip this subject
-                if len(subj_disc_values) < 2:
-                    continue
-                
-                # Create dict with number of slice between discs
-                previous_disc = subj_disc_values[0]
-                previous_pos = subj_disc_positions[0]
-                for pos, disc in zip(subj_disc_positions[1:], subj_disc_values[1:]):
-                    if f"{previous_disc}-{disc}" not in gap_dict:
-                        gap_dict[f"{previous_disc}-{disc}"] = []
-                    gap_dict[f"{previous_disc}-{disc}"].append(pos - previous_pos)
-                    previous_disc = disc
-                    previous_pos = pos
-
-            # Pick max for each gap between discs in gap_dict
-            for k, v in gap_dict.items():
-                gap_dict[k] = int(round(np.median(v)))
-
             # Rescale subjects
-            for subj_idx in range(n_subjects):
-                for metric in all_values[struc][struc_name].keys():
-                    if metric in ['slice_nb', 'disc_level']:
-                        continue
-                    interp_values, slice_interp = rescale_with_discs(disc_levels[subj_idx], all_values[struc][struc_name][metric][subj_idx], gap_dict)
+            add_slice_interp = True
+            for metric in all_values[struc][struc_name].keys():
+                if metric in ['slice_nb', 'disc_level']:
+                    continue
+                for subj_idx in range(len(all_values[struc][struc_name][metric])):
+                    interp_values, slice_interp = rescale_with_discs(all_values[struc][struc_name]['disc_level'][subj_idx], all_values[struc][struc_name][metric][subj_idx], rev_mapping, discs_gap, last_disc)
                     new_values[struc][struc_name][metric][subj_idx] = interp_values
-                if 'slice_interp' not in new_values[struc][struc_name]:
-                    new_values[struc][struc_name]['slice_interp'] = []
-                new_values[struc][struc_name]['slice_interp'].append(slice_interp)
-                # Remove slice_nb and disc_level from dict
-                new_values[struc][struc_name].pop('slice_nb', None)
-                new_values[struc][struc_name].pop('disc_level', None)
+                    if 'slice_interp' not in new_values[struc][struc_name]:
+                        new_values[struc][struc_name]['slice_interp'] = []
+                    if add_slice_interp:
+                        new_values[struc][struc_name]['slice_interp'].append(slice_interp)
+                add_slice_interp = False
+            # Remove slice_nb and disc_level from dict
+            new_values[struc][struc_name].pop('slice_nb', None)
+            new_values[struc][struc_name].pop('disc_level', None)
 
-            # Store gap_dict in all_values
-            new_values[struc][struc_name]['discs_gap'] = gap_dict
-    return new_values
+    return new_values, discs_gap, last_disc
 
-def rescale_with_discs(disc_levels, metric_list, gap_dict):
+def rescale_with_discs(disc_levels, metric_list, rev_mapping, gap, last_disc):
     '''
     Return rescaled metric values and corresponding slice indices using disc levels and gap information.
     '''
@@ -379,29 +394,81 @@ def rescale_with_discs(disc_levels, metric_list, gap_dict):
     slice_interp = []
     for disc_idx, disc in enumerate(subj_disc_values):
         if disc_idx < len(subj_disc_values) - 1:
-            gap = gap_dict[f"{disc}-{subj_disc_values[disc_idx + 1]}"]
             yp = values[subj_disc_positions[disc_idx]:subj_disc_positions[disc_idx+1]]
             xp = np.linspace(0, gap-1, len(yp))
             x = np.linspace(0, gap-1, gap)
             if not -1 in yp:
-                interp_func = np.interp(
-                    x=x,
-                    xp=xp,
-                    fp=yp
-                )
+                if yp.size > 0:
+                    interp_func = np.interp(
+                        x=x,
+                        xp=xp,
+                        fp=yp
+                    )
+                else:
+                    interp_func = np.full_like(x, 0)
             else:
                 interp_func = np.full_like(x, -1)
             interp_values += interp_func.tolist()
 
     start_disc_gap = 0
-    k = list(gap_dict.keys())[0]
-    i = 0
-    while k != f"{subj_disc_values[0]}-{subj_disc_values[1]}":
-        start_disc_gap += gap_dict[k]
-        i += 1
-        k = list(gap_dict.keys())[i]
+    disc = last_disc
+    while disc != rev_mapping[int(subj_disc_values[0])]:
+        start_disc_gap += gap
+        disc = previous_structure(disc)
     slice_interp += list(range(start_disc_gap, start_disc_gap + len(interp_values)))
     return interp_values, slice_interp
+
+def previous_structure(structure_name):
+    '''
+    Return the name of the previous structure in anatomical order.
+    '''
+    structure_name = structure_name.strip()
+
+    # Handle discs (L5-S1, L4-L5, ..., T9-T10)
+    # and foramens (foramens_L5-S1, foramens_L4-L5, ..., foramens_T9-T10)
+    foramen = False
+    if '-' in structure_name:
+        if structure_name.startswith('foramens_'):
+            foramen = True
+            structure_name = structure_name.replace('foramens_', '')
+        parts = structure_name.split('-')
+        if len(parts) == 2:
+            # Get previous vertebra
+            lower = []
+            for part in parts:
+                next_lower = previous_vertebra(part)
+                lower.append(next_lower)
+            previous_structure = "-".join(lower)
+            if foramen:
+                previous_structure = "foramens_" + previous_structure
+            return previous_structure
+        else:
+            return None
+        
+    # Handle vertebrae (T9, T10, T11, T12, L1, L2, L3, L4, L5, S1)
+    elif re.match(r'^[TLCS]\d+$', structure_name):
+        return previous_vertebra(structure_name)
+
+def previous_vertebra(vertebra):
+    vertebra = vertebra.strip()
+    if re.match(r'^T\d+$', vertebra):
+        if int(vertebra[1:]) == 1:
+            next_lower = "C7"
+        else:
+            next_lower = f"T{int(vertebra[1:]) - 1}"
+    elif re.match(r'^L\d+$', vertebra):
+        if int(vertebra[1:]) == 1:
+            next_lower = "T12"
+        else:
+            next_lower = f"L{int(vertebra[1:]) - 1}"
+    elif re.match(r'^S', vertebra):
+        next_lower = "L5"
+    elif re.match(r'^C\d+$', vertebra):
+        if int(vertebra[1:]) == 1:
+            return None
+        else:
+            next_lower = f"C{int(vertebra[1:]) - 1}"
+    return next_lower
 
 def create_dict_from_subject_data(subject_data, intensity_profile=True):
     """
@@ -509,18 +576,20 @@ def calculate_robustness_metrics_overall(all_values, all_demographics):
                     if len(subj_data['values']) > 1:  # Multiple measurements
                         subj_vals = np.array(subj_data['values'])
                         subj_slice = np.array(subj_data['slice_interp'])
+                        min_slice = np.min(subj_slice)
+                        max_slice = np.max(subj_slice)
 
                         mean_list = []
                         std_list = []
                         for sl in range(np.min(subj_slice), np.max(subj_slice)+1):
-                            mask = len(subj_slice == sl)
+                            mask = subj_slice == sl
                             if len(mask) > 1:
-                                subj_vals = subj_vals[mask]  
-                                subj_vals = subj_vals[~np.isnan(subj_vals)]  # Remove NaN
+                                subj_val = subj_vals[mask]  
+                                subj_val = subj_val[~np.isnan(subj_val)]  # Remove NaN
 
-                                if len(subj_vals) > 1:
-                                    mean_list.append(np.mean(subj_vals))
-                                    std_list.append(np.std(subj_vals))
+                                if len(subj_val) > 1:
+                                    mean_list.append(np.mean(subj_val))
+                                    std_list.append(np.std(subj_val))
 
                         mean_val = np.mean(mean_list) if mean_list else np.nan
                         std_val = np.mean(std_list) if std_list else np.nan
@@ -771,18 +840,19 @@ def group_data_by_demographics(all_values, all_demographics):
                     
                 values = all_values[struc][struc_name][metric]
                 demographics = all_demographics[struc][struc_name][metric]
+                slice_interp = all_values[struc][struc_name].get('slice_interp', None)
                 
                 # Group by sex
                 sex_groups = {
-                    'Male': {'values': [], 'demographics': []},
-                    'Female': {'values': [], 'demographics': []}
+                    'Male': {'values': [], 'demographics': [], 'slice_interp': []},
+                    'Female': {'values': [], 'demographics': [], 'slice_interp': []}
                 }
                 
                 # Group by age
                 age_groups = {
-                    '18-39': {'values': [], 'demographics': []},
-                    '40-59': {'values': [], 'demographics': []},
-                    '60+': {'values': [], 'demographics': []}
+                    '18-39': {'values': [], 'demographics': [], 'slice_interp': []},
+                    '40-59': {'values': [], 'demographics': [], 'slice_interp': []},
+                    '60+': {'values': [], 'demographics': [], 'slice_interp': []}
                 }
                 
                 for val, demo in zip(values, demographics):
@@ -792,12 +862,16 @@ def group_data_by_demographics(all_values, all_demographics):
                     # Add to sex groups
                     sex_groups[sex]['values'].append(val)
                     sex_groups[sex]['demographics'].append(demo)
-                    
+                    if slice_interp is not None:
+                        sex_groups[sex]['slice_interp'].append(slice_interp)
+
                     # Add to age groups
                     age_group = categorize_age_groups(age)
                     age_groups[age_group]['values'].append(val)
                     age_groups[age_group]['demographics'].append(demo)
-                
+                    if slice_interp is not None:
+                        age_groups[age_group]['slice_interp'].append(slice_interp)
+
                 grouped_by_sex[struc][struc_name][metric] = sex_groups
                 grouped_by_age[struc][struc_name][metric] = age_groups
     
