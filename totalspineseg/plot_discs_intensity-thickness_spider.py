@@ -137,15 +137,15 @@ def main():
         nucleus_solidity_array = np.array(nucleus_solidity_dict[name])
         for thickness, intensity, solidity, nucleus_eccentricity, nucleus_solidity in zip(thickness_array, intensity_array, solidity_array, nucleus_eccentricity_array, nucleus_solidity_array):
             # Intensity grade
-            if intensity <= 0.15:
+            if intensity <= 0.20:
                 intensity_grade = 5
             elif intensity <= 0.30:
                 intensity_grade = 4
             elif intensity <= 0.45:
                 intensity_grade = 3
-            elif nucleus_solidity < 0.50:
+            elif nucleus_solidity < 0.60:
                 intensity_grade =  2
-            elif nucleus_solidity >= 0.50:
+            elif nucleus_solidity >= 0.60:
                 intensity_grade = 1
             else:
                 intensity_grade = 0 # error
@@ -372,6 +372,37 @@ def main():
                         ax.set_title(f'{title}\n{sub.replace("_T2w", "")}\nT={thickness_val:.2f}, I={intensity_val:.2f}\n S={solidity_val:.2f}, E={eccentricity_val:.2f}\n NS={nucleus_solidity_val:.2f},  NE={nucleus_eccentricity_val:.2f}', fontsize=16)
                     else:
                         ax.set_visible(False)
+
+            # Add last row with mixed grades (containing '/')
+            mixed_idxs = np.where(np.char.find(grades_list, '/') >= 0)[0]
+            row_idx = len(unique_grades)  # last row index
+            if mixed_idxs.size > 0:
+                if len(mixed_idxs) > n_examples:
+                    mixed_idxs = np.random.choice(mixed_idxs, n_examples, replace=False)
+                for j in range(n_examples):
+                    ax = axes[row_idx, j] if n_grades > 1 else axes[0, j]
+                    ax.axis('off')
+                    if j < len(mixed_idxs):
+                        idx = mixed_idxs[j]
+                        img = imgs[idx]
+                        thickness_val = thicknesses[idx]
+                        intensity_val = intensities[idx]
+                        solidity_val = solidities[idx]
+                        eccentricity_val = eccentricities[idx]
+                        nucleus_eccentricity_val = nucleus_eccentricities[idx]
+                        nucleus_solidity_val = nucleus_solidities[idx]
+                        sub = subs[idx]
+                        grade_str = grades_list[idx]
+                        ax.imshow(img, cmap='gray')
+                        title = f'Grade {grade_str}'
+                        ax.set_title(f'{title}\n{sub.replace("_T2w", "")}\nT={thickness_val:.2f}, I={intensity_val:.2f}\n S={solidity_val:.2f}, E={eccentricity_val:.2f}\n NS={nucleus_solidity_val:.2f},  NE={nucleus_eccentricity_val:.2f}', fontsize=16)
+                    else:
+                        ax.set_visible(False)
+            else:
+                # No mixed grades: hide the reserved last row
+                for j in range(n_examples):
+                    ax = axes[row_idx, j] if n_grades > 1 else axes[0, j]
+                    ax.set_visible(False)
             plt.suptitle(f'Examples for disc {name}', fontsize=32)
             plt.tight_layout(rect=[0, 0.03, 1, 0.95])
             plt.savefig(f'imgs/disc_{name}_examples_by_grade.png')
