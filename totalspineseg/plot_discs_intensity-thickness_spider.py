@@ -16,6 +16,8 @@ def main():
     solidity_dict = {}
     volume_dict = {}
     eccentricity_dict = {}
+    nucleus_solidity_dict = {}
+    nucleus_eccentricity_dict = {}
     img_dict = {}
     seg_dict = {}
     gt_dict = {}
@@ -32,7 +34,7 @@ def main():
         "L4-L5": 2,
         "L5-S": 1
     }
-    filter = 'lowres'
+    filter = ''
     for sub in os.listdir(folder_path):
         csv_folder = os.path.join(folder_path, sub, "csv")
         discs_imgs = os.path.join(folder_path, sub, "imgs")
@@ -46,12 +48,14 @@ def main():
             else:
                 raise ValueError(f"L5-S not in discs for subject {sub}")
 
-            for name, intensity_peaks_gap, thickness, solidity, eccentricity, volume in zip(discs_data.name, discs_data.intensity_peaks_gap, discs_data.median_thickness, discs_data.solidity, discs_data.eccentricity, discs_data.volume):
+            for name, intensity_peaks_gap, thickness, solidity, eccentricity, volume, nucleus_solidity, nucleus_eccentricity in zip(discs_data.name, discs_data.intensity_variation, discs_data.median_thickness, discs_data.solidity, discs_data.eccentricity, discs_data.volume, discs_data.nucleus_solidity, discs_data.nucleus_eccentricity):
                 if name not in intensity_dict:
                     intensity_dict[name] = []
                     thickness_dict[name] = []
                     solidity_dict[name] = []
                     eccentricity_dict[name] = []
+                    nucleus_solidity_dict[name] = []
+                    nucleus_eccentricity_dict[name] = []
                     volume_dict[name] = []
                     img_dict[name] = []
                     seg_dict[name] = []
@@ -70,6 +74,8 @@ def main():
                     # Add solidity and eccentricity
                     solidity_dict[name].append(solidity)
                     eccentricity_dict[name].append(eccentricity)
+                    nucleus_solidity_dict[name].append(nucleus_solidity)
+                    nucleus_eccentricity_dict[name].append(nucleus_eccentricity)
 
                     # Add volume normalized by vertebrae volume
                     vert_volume = float(vertebrae_data[vertebrae_data['name'] == overlying_vert]['volume'].iloc[0])
@@ -86,7 +92,10 @@ def main():
                     # Add subject name
                     sub_dict[name].append(sub)
 
-
+    # Create output directory
+    if not os.path.exists('imgs'):
+        os.makedirs('imgs')
+    
     # Generate subplots
     # for name in intensity_dict:
     #     # Fit a curve to the data
@@ -109,11 +118,12 @@ def main():
         if len(thickness_array) > 0:
             median_thickness = np.median(thickness_array[gt_array==1]) # median of healthy discs only
             if median_thickness == 0:
-                median_thickness = 1.0
-                print(f"Warning: median thickness is zero for disc {name}. Setting to 1.0 to avoid division by zero.")
-            thickness_dict[name] = thickness_array / median_thickness
+                print(f"Warning: median thickness is zero for disc {name}. Discarding discs.")
+                del intensity_dict[name]
+            else:
+                thickness_dict[name] = thickness_array / median_thickness
         else:
-            thickness_dict[name] = thickness_array
+            del intensity_dict[name]
     
     # Determine discs grades
     grades_dict = {}
@@ -122,25 +132,42 @@ def main():
             grades_dict[name] = []
         thickness_array = np.array(thickness_dict[name])
         intensity_array = np.array(intensity_dict[name])
-        for thickness, intensity in zip(thickness_array, intensity_array):
-            if thickness < 0.3 and intensity < 0.3:
-                grades_dict[name].append(8)
-            elif thickness < 0.6 and intensity < 0.3:
-                grades_dict[name].append(7)
-            elif thickness < 0.9 and intensity < 0.3:
-                grades_dict[name].append(6)
-            elif intensity < 0.1 and thickness >= 0.9:
-                grades_dict[name].append(5)
-            elif intensity < 0.3 and thickness >= 0.9:
-                grades_dict[name].append(4)
-            elif intensity < 0.6 and thickness >= 0.9:
-                grades_dict[name].append(3)
-            elif intensity < 0.9 and thickness >= 0.9:
-                grades_dict[name].append(2)
-            elif intensity >= 0.9 and thickness >= 0.9:
-                grades_dict[name].append(1)
+        solidity_array = np.array(solidity_dict[name])
+        nucleus_eccentricity_array = np.array(nucleus_eccentricity_dict[name])
+        nucleus_solidity_array = np.array(nucleus_solidity_dict[name])
+        for thickness, intensity, solidity, nucleus_eccentricity, nucleus_solidity in zip(thickness_array, intensity_array, solidity_array, nucleus_eccentricity_array, nucleus_solidity_array):
+            # Intensity grade
+            if intensity <= 0.15:
+                intensity_grade = 5
+            elif intensity <= 0.30:
+                intensity_grade = 4
+            elif intensity <= 0.45:
+                intensity_grade = 3
+            elif nucleus_solidity < 0.50:
+                intensity_grade =  2
+            elif nucleus_solidity >= 0.50:
+                intensity_grade = 1
             else:
-                grades_dict[name].append(0) # error
+                intensity_grade = 0 # error
+            
+            # Thickness grade 
+            if thickness < 0.3 or solidity < 0.70:
+                thickness_grade = 8
+            elif thickness < 0.6 or solidity < 0.80:
+                thickness_grade = 7
+            elif thickness < 0.9 or solidity < 0.85:
+                thickness_grade = 6
+            else:
+                thickness_grade = 1
+            
+            # Grade disc
+            if thickness_grade == 1:
+                grades_dict[name].append(intensity_grade)
+            elif intensity_grade == 5:
+                grades_dict[name].append(thickness_grade)
+            else: # Mixed grade or double entry
+                grades_dict[name].append(f"{intensity_grade}/{thickness_grade}")
+
     # x_line = np.linspace(-1, 1, 200)
     # grades = {}
     # for i in range(0, 8):
@@ -169,65 +196,151 @@ def main():
     # Plot all points together with color corresponding to grade
 
     # 3D scatter plot: Thickness vs Intensity vs Eccentricity
-    # import plotly.graph_objects as go
+    import plotly.graph_objects as go
 
-    # thickness_all = np.concatenate([thickness_dict[name] for name in thickness_dict])
-    # intensity_all = np.concatenate([intensity_dict[name] for name in intensity_dict])
-    # eccentricity_all = np.concatenate([eccentricity_dict[name] for name in eccentricity_dict])
-    # volume_all = np.concatenate([volume_dict[name] for name in volume_dict])
-    # grades_all = np.concatenate([gt_dict[name] for name in gt_dict])
+    for name in intensity_dict:
+        # thickness_all = np.concatenate([thickness_dict[name] for name in thickness_dict])
+        # intensity_all = np.concatenate([intensity_dict[name] for name in intensity_dict])
+        # eccentricity_all = np.concatenate([eccentricity_dict[name] for name in eccentricity_dict])
+        # solidity_all = np.concatenate([solidity_dict[name] for name in solidity_dict])
+        # volume_all = np.concatenate([volume_dict[name] for name in volume_dict])
+        # grades_all = np.concatenate([gt_dict[name] for name in gt_dict])
+        
+        thickness_all = np.array(thickness_dict[name])
+        intensity_all = np.array(intensity_dict[name])
+        eccentricity_all = np.array(eccentricity_dict[name])
+        solidity_all = np.array(solidity_dict[name])
+        nucleus_eccentricity_all = np.array(nucleus_eccentricity_dict[name])
+        nucleus_solidity_all = np.array(nucleus_solidity_dict[name])
+        volume_all = np.array(volume_dict[name])
+        grades_all = np.array(gt_dict[name])
 
-    # fig = go.Figure(data=[go.Scatter3d(
-    #     x=thickness_all,
-    #     y=intensity_all,
-    #     z=volume_all,
-    #     mode='markers',
-    #     marker=dict(
-    #         size=5,
-    #         color=grades_all,
-    #         colorscale='Viridis',
-    #         colorbar=dict(title='Grade'),
-    #         opacity=0.8
-    #     ),
-    #     text=[f'Grade: {g}<br>Thickness: {t:.2f}<br>Intensity: {i:.2f}<br>Volume: {v:.2f}' 
-    #           for g, t, i, v in zip(grades_all, thickness_all, intensity_all, volume_all)],
-    #     hoverinfo='text'
-    # )])
-    # fig.update_layout(
-    #     scene=dict(
-    #         xaxis_title='Thickness',
-    #         yaxis_title='Intensity',
-    #         zaxis_title='Volume'
-    #     ),
-    #     title='Disc: Thickness vs Intensity vs Volume'
-    # )
-    # fig.write_html('imgs/disc_thickness_intensity_volume_3d_plotly.html', auto_open=False)
-
-    plt.scatter(np.concatenate([thickness_dict[name] for name in thickness_dict]), np.concatenate([intensity_dict[name] for name in intensity_dict]), c=np.concatenate([gt_dict[name] for name in grades_dict]))
+        fig = go.Figure(data=[go.Scatter3d(
+            x=thickness_all,
+            y=intensity_all,
+            z=solidity_all,
+            mode='markers',
+            marker=dict(
+                size=5,
+                color=grades_all,
+                colorscale='Viridis',
+                colorbar=dict(title='Grade'),
+                opacity=0.8
+            ),
+            text=[f'Grade: {g}<br>Thickness: {t:.2f}<br>Intensity: {i:.2f}<br>Solidity: {v:.2f}' 
+                for g, t, i, v in zip(grades_all, thickness_all, intensity_all, solidity_all)],
+            hoverinfo='text'
+        )])
+        fig.update_layout(
+            scene=dict(
+                xaxis_title='Thickness',
+                yaxis_title='Intensity',
+                zaxis_title='Solidity'
+            ),
+            title=f'Disc {name}: Thickness vs Intensity vs Solidity'
+        )
+        fig.write_html(f'imgs/disc_{name}_thickness_intensity_solidity_3d_plotly.html', auto_open=False)
+        
+        fig = go.Figure(data=[go.Scatter3d(
+            x=thickness_all,
+            y=intensity_all,
+            z=nucleus_solidity_all,
+            mode='markers',
+            marker=dict(
+                size=5,
+                color=grades_all,
+                colorscale='Viridis',
+                colorbar=dict(title='Grade'),
+                opacity=0.8
+            ),
+            text=[f'Grade: {g}<br>Thickness: {t:.2f}<br>Intensity: {e:.2f}<br>Nucleus Solidity: {v:.2f}' 
+                for g, t, e, v in zip(grades_all, thickness_all, intensity_all, nucleus_solidity_all)],
+            hoverinfo='text'
+        )])
+        fig.update_layout(
+            scene=dict(
+                xaxis_title='Thickness',
+                yaxis_title='Intensity',
+                zaxis_title='Nucleus Solidity'
+            ),
+            title=f'Disc {name}: Thickness vs Intensity vs Nucleus Solidity'
+        )
+        fig.write_html(f'imgs/disc_{name}_thickness_intensity_nucleus_solidity_3d_plotly.html', auto_open=False)
+        
+        fig = go.Figure(data=[go.Scatter3d(
+            x=thickness_all,
+            y=intensity_all,
+            z=nucleus_eccentricity_all,
+            mode='markers',
+            marker=dict(
+                size=5,
+                color=grades_all,
+                colorscale='Viridis',
+                colorbar=dict(title='Grade'),
+                opacity=0.8
+            ),
+            text=[f'Grade: {g}<br>Thickness: {t:.2f}<br>Intensity: {e:.2f}<br>Nucleus Eccentricity: {v:.2f}' 
+                for g, t, e, v in zip(grades_all, thickness_all, intensity_all, nucleus_eccentricity_all)],
+            hoverinfo='text'
+        )])
+        fig.update_layout(
+            scene=dict(
+                xaxis_title='Thickness',
+                yaxis_title='Intensity',
+                zaxis_title='Nucleus Eccentricity'
+            ),
+            title=f'Disc {name}: Thickness vs Intensity vs Nucleus Eccentricity'
+        )
+        fig.write_html(f'imgs/disc_{name}_thickness_intensity_nucleus_eccentricity_3d_plotly.html', auto_open=False)
+    plt.scatter(np.concatenate([thickness_dict[name] for name in thickness_dict]), np.concatenate([intensity_dict[name] for name in intensity_dict]), c=np.concatenate([gt_dict[name] for name in gt_dict]))
     plt.xlabel('Thickness')
     plt.ylabel('Intensity')
-    plt.ylim(0, 2.0)
-    plt.xlim(0, 2)
-    plt.title('Disc Intensity vs Thickness (All Discs)')
+    plt.title(f'Disc Intensity vs Thickness (All Discs)')
     plt.legend()
     if not os.path.exists('imgs'):
         os.makedirs('imgs')
-    plt.savefig('imgs/disc_intensity_vs_thickness.png')
+    plt.savefig(f'imgs/disc_intensity_vs_thickness.png')
 
+    plt.figure()
+    plt.scatter(np.concatenate([thickness_dict[name] for name in thickness_dict]), np.concatenate([solidity_dict[name] for name in solidity_dict]), c=np.concatenate([gt_dict[name] for name in gt_dict]))
+    plt.xlabel('Thickness')
+    plt.ylabel('Solidity')
+    plt.title(f'Disc Solidity vs Thickness (All Discs)')
+    plt.legend()
+    if not os.path.exists('imgs'):
+        os.makedirs('imgs')
+    plt.savefig(f'imgs/disc_solidity_vs_thickness.png')
+    
+    plt.figure()
+    plt.scatter(np.concatenate([thickness_dict[name] for name in thickness_dict]), np.concatenate([eccentricity_dict[name] for name in eccentricity_dict]), c=np.concatenate([gt_dict[name] for name in gt_dict]))
+    plt.xlabel('Thickness')
+    plt.ylabel('Eccentricity')
+    plt.title(f'Disc Eccentricity vs Thickness (All Discs)')
+    plt.legend()
+    if not os.path.exists('imgs'):
+        os.makedirs('imgs')
+    plt.savefig(f'imgs/disc_eccentricity_vs_thickness.png')
+    
     # Create subplots for each disc with rows corresponding to grades and pick 5 examples per grade if possible
     for name in intensity_dict:
-        grades_list = np.array(grades_dict[name])
+        grades_list = np.array(grades_dict[name], dtype=str)
         imgs = img_dict[name]
         segs = seg_dict[name]
         thicknesses = np.array(thickness_dict[name])
         intensities = np.array(intensity_dict[name])
+        solidities = np.array(solidity_dict[name])
+        eccentricities = np.array(eccentricity_dict[name])
+        nucleus_eccentricities = np.array(nucleus_eccentricity_dict[name])
+        nucleus_solidities = np.array(nucleus_solidity_dict[name])
         subs = np.array(sub_dict[name])
+        if len(imgs) != len(segs) or len(imgs) != len(thicknesses) or len(imgs) != len(intensities) or len(imgs) != len(solidities) or len(imgs) != len(eccentricities) or len(imgs) != len(nucleus_eccentricities) or len(imgs) != len(nucleus_solidities) or len(imgs) != len(subs):
+            raise ValueError(f"Data length mismatch for disc {name}")
         # Combine image and segmentation side by side for each example
         combined_imgs = [np.concatenate((img, seg), axis=1) for img, seg in zip(imgs, segs)]
         imgs = combined_imgs
-        unique_grades = np.unique(grades_list)
+        unique_grades = np.unique([num for num in grades_list if '/' not in num])
         if grades_list.size > 0:
-            n_grades = len(unique_grades)
+            n_grades = len(unique_grades) + 1 # Mixed grade row
             n_examples = 5
 
             fig, axes = plt.subplots(n_grades, n_examples, figsize=(n_examples * 3, n_grades * 3))
@@ -244,6 +357,11 @@ def main():
                         img = imgs[idxs[j]]
                         thickness_val = thicknesses[idxs[j]]
                         intensity_val = intensities[idxs[j]]
+                        solidity_val = solidities[idxs[j]]
+                        eccentricity_val = eccentricities[idxs[j]]
+                        nucleus_eccentricity_val = nucleus_eccentricities[idxs[j]]
+                        nucleus_solidity_val = nucleus_solidities[idxs[j]]
+
                         sub = subs[idxs[j]]
                         ax.imshow(img, cmap='gray')
                         if grade == 0:
@@ -251,7 +369,7 @@ def main():
                         else:
                             title = f'Grade {grade}'
                         # Display thickness and intensity values
-                        ax.set_title(f'{title}\n{sub.replace("_T2w", "")}\nT={thickness_val:.2f}, I={intensity_val:.2f}', fontsize=16)
+                        ax.set_title(f'{title}\n{sub.replace("_T2w", "")}\nT={thickness_val:.2f}, I={intensity_val:.2f}\n S={solidity_val:.2f}, E={eccentricity_val:.2f}\n NS={nucleus_solidity_val:.2f},  NE={nucleus_eccentricity_val:.2f}', fontsize=16)
                     else:
                         ax.set_visible(False)
             plt.suptitle(f'Examples for disc {name}', fontsize=32)
