@@ -179,6 +179,8 @@ def load_subject_features(reports_dir: Path) -> "pd.DataFrame":
 		canal_path = files_dir / "canal_subject.csv"
 		if canal_path.exists():
 			canal = _read_csv(canal_path)
+			# Keep only canal lines
+			canal = canal[canal["structure_name"] == "canal"]
 			if "vertebra_level" in canal.columns:
 				feat.update(
 					_flatten_grouped_stats(
