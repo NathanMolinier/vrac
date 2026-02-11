@@ -268,6 +268,10 @@ def load_readout(readout_csv: Path) -> "pd.DataFrame":
 	if "Lfd_Nr" not in df.columns:
 		raise SystemExit(f"Expected column 'Lfd_Nr' in {readout_csv}")
 
+	level_mapping = {
+		1: "L5-S1", 5: "L4-L5", 4: "L3-L4", 3: "L2-L3", 2: "L1-L2"
+	}
+
 	# Drop completely empty unnamed columns
 	df = df.loc[:, [c for c in df.columns if c and not str(c).startswith("Unnamed")]]
 
@@ -275,6 +279,11 @@ def load_readout(readout_csv: Path) -> "pd.DataFrame":
 	df["Lfd_Nr"] = pd.to_numeric(df["Lfd_Nr"], errors="coerce").astype("Int64")
 	df = df[df["Lfd_Nr"].notna()].copy()
 	df["Lfd_Nr"] = df["Lfd_Nr"].astype(int)
+
+	# Remap Level column using level_mapping
+	if "Level" in df.columns:
+		level_numeric = pd.to_numeric(df["Level"], errors="coerce")
+		df["Level"] = level_numeric.map(level_mapping).fillna(df["Level"])
 	return df
 
 
