@@ -152,6 +152,8 @@ def _rowwise_to_features(
 		for col in numeric_cols:
 			key = f"{prefix}_{_safe_col(col)}_{entity_str}"
 			val = row[col]
+			if val == -1:
+				val = np.nan
 			out[key] = float(val) if pd.notna(val) else np.nan
 
 	return out
