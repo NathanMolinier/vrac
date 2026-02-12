@@ -107,21 +107,42 @@ def _flatten_grouped_stats(
 	]
 	if not numeric_cols:
 		return out
+	
+	df_ordered = (
+		df.sort_values("slice_interp")
+		if "slice_interp" in df.columns
+		else df
+	)
 
+	vertebra_avg = {}
 	grouped = df.groupby(group_col)[numeric_cols].agg(list(stats))
 	# Columns become MultiIndex: (col, stat)
 	for (col, stat_name), series in grouped.items():
 		for level, val in series.items():
 			key = f"{prefix}_{_safe_col(col)}_{stat_name}_{_safe_col(str(level))}"
-			out[key] = float(val) if pd.notna(val) else np.nan
-
-	# Add global stats across all rows
-	global_stats = df[numeric_cols].agg(list(stats))
-	for col in numeric_cols:
-		for stat_name in stats:
-			val = global_stats.loc[stat_name, col]
-			key = f"{prefix}_{_safe_col(col)}_{stat_name}_ALL"
-			out[key] = float(val) if pd.notna(val) else np.nan
+			vertebra_avg[key] = float(val) if pd.notna(val) else np.nan
+	
+	levels = df_ordered["vertebra_level"].to_numpy()
+	for i in range(1, len(levels)):
+		if levels[i] != levels[i - 1]:
+			disc_level = f"{levels[i]}-{levels[i-1]}"
+			for col in numeric_cols:
+				key = f"{prefix}_disc_{disc_level}_{_safe_col(col)}_ratio"
+				val = df_ordered[col].to_numpy()[i]
+				val_prev = df_ordered[col].to_numpy()[i - 1]
+				prev_vertebra_key = f"{prefix}_{_safe_col(col)}_mean_{_safe_col(str(levels[i-1]))}"
+				curr_vertebra_key = f"{prefix}_{_safe_col(col)}_mean_{_safe_col(str(levels[i]))}"
+				if curr_vertebra_key in vertebra_avg and prev_vertebra_key in vertebra_avg:
+					denom = (vertebra_avg[curr_vertebra_key] + vertebra_avg[prev_vertebra_key])
+					out[key] = 2*np.mean([val, val_prev])/denom if denom != 0 else np.nan
+	
+	# Approximate L5-S1 level
+	if levels[0] == "L5":
+		for col in numeric_cols:
+			key = f"{prefix}_disc_L5-S1_{_safe_col(col)}_ratio"
+			val = df_ordered[col].to_numpy()[0]
+			denom = vertebra_avg[f"{prefix}_{_safe_col(col)}_mean_L5"]
+			out[key] = val/denom if denom != 0 else np.nan 
 
 	return out
 
