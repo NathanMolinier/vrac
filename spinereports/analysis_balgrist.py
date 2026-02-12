@@ -215,21 +215,6 @@ def load_subject_features(reports_dir: Path) -> "pd.DataFrame":
 					)
 				)
 
-		# csf
-		csf_path = files_dir / "csf_subject.csv"
-		if csf_path.exists():
-			csf = _read_csv(csf_path)
-			if "vertebra_level" in csf.columns:
-				feat.update(
-					_flatten_grouped_stats(
-						csf,
-						prefix="csf",
-						group_col="vertebra_level",
-						stats=("mean", "std", "median"),
-						drop_cols=("slice_interp", "structure", "structure_name"),
-					)
-				)
-
 		# discs
 		discs_path = files_dir / "discs_subject.csv"
 		if discs_path.exists():
@@ -253,20 +238,6 @@ def load_subject_features(reports_dir: Path) -> "pd.DataFrame":
 					_rowwise_to_features(
 						foramens,
 						prefix="foramens",
-						id_col="structure_name",
-						drop_cols=("structure",),
-					)
-				)
-
-		# vertebrae
-		vertebrae_path = files_dir / "vertebrae_subject.csv"
-		if vertebrae_path.exists():
-			vertebrae = _read_csv(vertebrae_path)
-			if "structure_name" in vertebrae.columns:
-				feat.update(
-					_rowwise_to_features(
-						vertebrae,
-						prefix="vertebrae",
 						id_col="structure_name",
 						drop_cols=("structure",),
 					)
@@ -306,52 +277,6 @@ def load_readout(readout_csv: Path) -> "pd.DataFrame":
 		level_numeric = pd.to_numeric(df["Level"], errors="coerce")
 		df["Level"] = level_numeric.map(level_mapping).fillna(df["Level"])
 	return df
-
-
-def select_outcome_columns(
-	readout: "pd.DataFrame",
-	*,
-	severity_cols: Optional[List[str]],
-	severity_regex: Optional[str],
-	exclude_regex: Optional[str],
-) -> List[str]:
-
-	if severity_cols:
-		missing = [c for c in severity_cols if c not in readout.columns]
-		if missing:
-			raise SystemExit(f"Requested --severity-cols not found: {missing}")
-		return severity_cols
-
-	regex = re.compile(severity_regex, re.IGNORECASE) if severity_regex else None
-	exclude = re.compile(exclude_regex, re.IGNORECASE) if exclude_regex else None
-
-	# Default: focus on stenosis-related columns
-	candidates: List[str] = []
-	for c in readout.columns:
-		if c == "Lfd_Nr":
-			continue
-		if exclude and exclude.search(str(c)):
-			continue
-		if regex:
-			if regex.search(str(c)):
-				candidates.append(c)
-		else:
-			if "stenosis" in str(c).lower() and "intra" not in str(c).lower():
-				candidates.append(c)
-
-	outcomes: List[str] = []
-	for c in candidates:
-		if pd.api.types.is_numeric_dtype(readout[c]):
-			outcomes.append(c)
-			continue
-		# If the column got parsed as object due to missing values or mixed types,
-		# attempt coercion for outcome candidates.
-		coerced = pd.to_numeric(readout[c], errors="coerce")
-		if int(coerced.notna().sum()) >= 3:
-			readout[c] = coerced
-			outcomes.append(c)
-
-	return outcomes
 
 
 def compute_correlations(
@@ -506,24 +431,6 @@ def build_argparser() -> argparse.ArgumentParser:
 		help="Output directory (default: <reports_dir>/analysis_balgrist_out)",
 	)
 	p.add_argument(
-		"--severity-cols",
-		type=str,
-		default=None,
-		help="Comma-separated list of severity/outcome columns to analyze (exact names)",
-	)
-	p.add_argument(
-		"--severity-regex",
-		type=str,
-		default=None,
-		help="Regex used to select outcome columns (default: columns containing 'stenosis' and not 'Intra')",
-	)
-	p.add_argument(
-		"--exclude-regex",
-		type=str,
-		default=r"\bIntra\b",
-		help="Regex of columns to exclude from outcomes selection",
-	)
-	p.add_argument(
 		"--feature-prefixes",
 		type=str,
 		default="canal,csf,discs,foramens,vertebrae",
@@ -560,13 +467,8 @@ def main() -> None:
 	merged.to_csv(outdir / "merged_subject_level.csv", index=False)
 	print(f"Merged subjects: {merged.shape[0]} (readout={readout.shape[0]}, features={features.shape[0]})")
 
-	severity_cols = [c.strip() for c in args.severity_cols.split(",")] if args.severity_cols else None
-	outcomes = select_outcome_columns(
-		readout,
-		severity_cols=severity_cols,
-		severity_regex=args.severity_regex,
-		exclude_regex=args.exclude_regex,
-	)
+	print()
+
 	if not outcomes:
 		raise SystemExit(
 			"No outcome columns selected. Use --severity-regex or --severity-cols to specify outcomes."
