@@ -303,32 +303,59 @@ def select_outcome_columns(
 	return outcomes
 
 
+def add_level_specific_features(
+	merged: "pd.DataFrame",
+	feature_prefixes: Sequence[str],
+	level_col: str = "Level",
+) -> List[str]:
+	if level_col not in merged.columns:
+		return []
+
+	pattern = re.compile(r"^(?P<prefix>[^_]+)_(?P<level>[^_]+)_(?P<metric>.+)$")
+	level_feature_map: Dict[tuple[str, str], Dict[str, str]] = {}
+
+	for col in merged.columns:
+		if col.startswith(tuple(feature_prefixes)):
+			match = pattern.match(col)		
+			if not match:
+				continue
+			key = (match.group("prefix"), match.group("metric"))
+			if key not in level_feature_map:
+				level_feature_map[key] = {match.group("level"): col}
+			else:
+				level_feature_map[key][match.group("level")] = col
+
+	level_values = merged[level_col].astype(str)
+	levels_unique = level_values.unique()
+	new_cols: List[str] = []
+	for (prefix, metric), di in level_feature_map.items():
+		new_col = f"{prefix}_{metric}_at_level"
+		merged[new_col] = np.nan
+		for level in levels_unique:
+			if level not in di.keys():
+				continue
+			col = di[level]
+			mask = level_values == str(level)
+			if mask.any():
+				merged.loc[mask, new_col] = merged.loc[mask, col]
+		new_cols.append(new_col)
+
+	return new_cols
+
 
 def compute_correlations(
 	merged: "pd.DataFrame",
-	*,
 	outcomes: Sequence[str],
-	feature_prefixes: Optional[Sequence[str]],
+	feature_cols: Optional[Sequence[str]],
 	min_n: int,
 ) -> "pd.DataFrame":
 
 	# Feature columns: numeric and not outcomes
-	numeric_cols = _numeric_columns(merged)
-	feature_cols = [c for c in numeric_cols if c not in set(outcomes) | {"Lfd_Nr"}]
-	if feature_prefixes:
-		prefixes = tuple(feature_prefixes)
-		feature_cols = [c for c in feature_cols if c.startswith(prefixes)]
-
 	results: List[Dict[str, object]] = []
 	for outcome in outcomes:
-		if outcome not in merged.columns:
-			continue
-
 		y_full = merged[outcome]
-		if not pd.api.types.is_numeric_dtype(y_full):
-			continue
-
 		for feature in feature_cols:
+
 			x_full = merged[feature]
 			mask = x_full.notna() & y_full.notna()
 			n = int(mask.sum())
@@ -500,16 +527,15 @@ def main() -> None:
 		)
 	print(f"Outcomes: {len(outcomes)}")
 
-	feature_prefixes = [p.strip() for p in args.feature_prefixes.split(",") if p.strip()]
-	correlations = compute_correlations(
-		merged,
-		outcomes=outcomes,
-		feature_prefixes=feature_prefixes,
-		min_n=int(args.min_n),
-	)
-
-	if correlations.empty:
-		raise SystemExit("No correlations computed (check --min-n and that outcomes/features are numeric)")
+	feature_prefixes = ['canal', 'discs', 'foramens']
+	level_feature_cols = add_level_specific_features(merged, feature_prefixes, level_col="Level")
+	if level_feature_cols:
+		level_correlations = compute_correlations(
+			merged,
+			outcomes=outcomes,
+			feature_cols=level_feature_cols,
+			min_n=int(args.min_n),
+		)
 
 	# Write per-outcome CSVs
 	for outcome in correlations["outcome"].unique():
