@@ -279,6 +279,31 @@ def load_readout(readout_csv: Path) -> "pd.DataFrame":
 	return df
 
 
+def select_outcome_columns(
+	readout: "pd.DataFrame",
+) -> List[str]:
+
+	# Default: focus on stenosis-related columns
+	candidates: List[str] = []
+	for c in readout.columns:
+		if "stenosis" in str(c).lower() and "intra" not in str(c).lower() and "extraforaminal" not in str(c).lower():
+			candidates.append(c)
+
+	outcomes: List[str] = []
+	for c in candidates:
+		if pd.api.types.is_numeric_dtype(readout[c]):
+			outcomes.append(c)
+			continue
+		# Try coercion if parsed as object
+		coerced = pd.to_numeric(readout[c], errors="coerce")
+		if int(coerced.notna().sum()) >= 3:
+			readout[c] = coerced
+			outcomes.append(c)
+
+	return outcomes
+
+
+
 def compute_correlations(
 	merged: "pd.DataFrame",
 	*,
@@ -467,7 +492,7 @@ def main() -> None:
 	merged.to_csv(outdir / "merged_subject_level.csv", index=False)
 	print(f"Merged subjects: {merged.shape[0]} (readout={readout.shape[0]}, features={features.shape[0]})")
 
-	print()
+	outcomes = select_outcome_columns(readout)
 
 	if not outcomes:
 		raise SystemExit(
