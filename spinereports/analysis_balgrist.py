@@ -127,7 +127,7 @@ def _flatten_grouped_stats(
 		if levels[i] != levels[i - 1]:
 			disc_level = f"{levels[i]}-{levels[i-1]}"
 			for col in numeric_cols:
-				key = f"{prefix}_disc_{disc_level}_{_safe_col(col)}_ratio"
+				key = f"{prefix}_{disc_level}_{_safe_col(col)}_ratio"
 				val = df_ordered[col].to_numpy()[i]
 				val_prev = df_ordered[col].to_numpy()[i - 1]
 				prev_vertebra_key = f"{prefix}_{_safe_col(col)}_mean_{_safe_col(str(levels[i-1]))}"
@@ -139,7 +139,7 @@ def _flatten_grouped_stats(
 	# Approximate L5-S1 level
 	if levels[0] == "L5":
 		for col in numeric_cols:
-			key = f"{prefix}_disc_L5-S1_{_safe_col(col)}_ratio"
+			key = f"{prefix}_L5-S1_{_safe_col(col)}_ratio"
 			val = df_ordered[col].to_numpy()[0]
 			denom = vertebra_avg[f"{prefix}_{_safe_col(col)}_mean_L5"]
 			out[key] = val/denom if denom != 0 else np.nan 
@@ -171,7 +171,7 @@ def _rowwise_to_features(
 			continue
 		entity_str = _safe_col(str(entity))
 		for col in numeric_cols:
-			key = f"{prefix}_{_safe_col(col)}_{entity_str}"
+			key = f"{prefix}_{entity_str.replace('foramens_', '').replace('L5-S', 'L5-S1')}_{_safe_col(col)}"
 			val = row[col]
 			if val == -1:
 				val = np.nan
