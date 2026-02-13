@@ -442,6 +442,10 @@ def save_plots(
 			(row["outcome"], row["feature"]): row["spearman_r"]
 			for _, row in correlations.iterrows()
 		}
+		q_map = {
+			(row["outcome"], row["feature"]): row["spearman_q"]
+			for _, row in correlations.iterrows()
+		}
 		for i, outcome in enumerate(heatmap_outcomes):
 			for j, feature in enumerate(heatmap_features):
 				ax = axes[i][j]
@@ -465,17 +469,22 @@ def save_plots(
 					ax.set_ylabel("")
 				ax.set_xlabel("")
 				r_val = corr_map.get((outcome, feature))
+				q_val = q_map.get((outcome, feature))
 				if r_val is not None and np.isfinite(r_val):
 					ax.text(
 						0.02,
 						0.98,
-						f"r={r_val:.2f}",
+						f"r={r_val:.2f}\nq={q_val:.3g}" if q_val is not None else f"r={r_val:.2f}",
 						transform=ax.transAxes,
 						va="top",
 						ha="left",
 						fontsize=8,
 						bbox={"boxstyle": "round,pad=0.2", "facecolor": "white", "alpha": 0.7},
 					)
+				if q_val is not None and np.isfinite(q_val) and q_val < 0.05:
+					for spine in ax.spines.values():
+						spine.set_edgecolor("red")
+						spine.set_linewidth(2.0)
 
 		fig.tight_layout()
 		plt.savefig(plots_dir / "grid_outcomes_by_features.png", dpi=200)
