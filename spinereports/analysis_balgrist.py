@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Correlate morphometrics with Balgrist severity scores.
 
-This script scans a `reports/` folder produced by the pipeline (see `tree.txt`),
+This script scans a `reports/` folder produced by Spinereports,
 loads per-subject morphometrics from `reports/sub-*/files/*_subject.csv`, merges
 them with the severity scores from `Readout_lumbar_23112025.csv` via `Lfd_Nr`,
 and runs correlation analyses.
@@ -19,10 +19,6 @@ Written to `--outdir` (default: `<reports>/analysis_balgrist_out`):
 - one `correlations__<outcome>.csv` per outcome
 - `top_correlations.csv`
 - quick plots under `plots/`
-
-Dependencies
-------------
-Requires `pandas` and `scipy` (plus matplotlib/seaborn already in this repo).
 """
 
 from __future__ import annotations
@@ -68,6 +64,7 @@ def _bh_fdr(pvals: np.ndarray) -> np.ndarray:
 	out[mask] = tmp
 	return out
 
+
 def _parse_subject_number(subject_dir_name: str) -> Optional[int]:
 	"""Extract subject number from a folder like `sub-001_acq-sag_T2w`."""
 	m = re.search(r"\bsub-(\d+)", subject_dir_name)
@@ -77,10 +74,6 @@ def _parse_subject_number(subject_dir_name: str) -> Optional[int]:
 		return int(m.group(1))
 	except ValueError:
 		return None
-
-
-def _numeric_columns(df: "pd.DataFrame") -> List[str]:
-	return [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
 
 
 def _read_csv(path: Path) -> "pd.DataFrame":
@@ -427,37 +420,65 @@ def save_plots(
 	top = top.sort_values(["spearman_q", "spearman_p", "abs_spearman_r"], ascending=[True, True, False])
 	top = top.head(top_k)
 
-	# Scatter plots for top correlations
-	for _, row in top.iterrows():
-		outcome = row["outcome"]
-		feature = row["feature"]
-		df = merged[[outcome, feature]].dropna()
-		if df.shape[0] < 3:
-			continue
-
-		plt.figure(figsize=(5.0, 4.0))
-		sns.regplot(data=df, x=feature, y=outcome, scatter_kws={"s": 25, "alpha": 0.8}, line_kws={"alpha": 0.8})
-		plt.title(f"{outcome} vs {feature}\nSpearman r={row['spearman_r']:.3f}, q={row['spearman_q']:.3g}, n={int(row['n'])}")
-		plt.tight_layout()
-		fname = f"scatter__{_safe_col(str(outcome))}__{_safe_col(str(feature))}.png"
-		plt.savefig(plots_dir / fname, dpi=200)
-		plt.close()
-
-	# Heatmap: outcomes x (top features per outcome)
+	# Subplot grid: outcomes as rows, features as columns
 	heatmap_outcomes = list(top["outcome"].unique())
 	heatmap_features = list(top["feature"].unique())
-	mat = (
-		correlations[correlations["outcome"].isin(heatmap_outcomes) & correlations["feature"].isin(heatmap_features)]
-		.pivot_table(index="feature", columns="outcome", values="spearman_r")
-		.reindex(index=heatmap_features)
-	)
+	if heatmap_outcomes and heatmap_features:
+		fig, axes = plt.subplots(
+			nrows=len(heatmap_outcomes),
+			ncols=len(heatmap_features),
+			figsize=(3.2 * len(heatmap_features), 2.8 * len(heatmap_outcomes)),
+			sharex=False,
+			sharey=False,
+		)
+		if len(heatmap_outcomes) == 1 and len(heatmap_features) == 1:
+			axes = np.array([[axes]])
+		elif len(heatmap_outcomes) == 1:
+			axes = np.array([axes])
+		elif len(heatmap_features) == 1:
+			axes = np.array([[ax] for ax in axes])
 
-	if not mat.empty:
-		plt.figure(figsize=(max(6.0, 0.6 * len(heatmap_outcomes)), max(6.0, 0.25 * len(heatmap_features))))
-		sns.heatmap(mat, cmap="vlag", center=0.0, linewidths=0.5, linecolor="white")
-		plt.title("Spearman correlations (top pairs)")
-		plt.tight_layout()
-		plt.savefig(plots_dir / "heatmap_spearman_top.png", dpi=200)
+		corr_map = {
+			(row["outcome"], row["feature"]): row["spearman_r"]
+			for _, row in correlations.iterrows()
+		}
+		for i, outcome in enumerate(heatmap_outcomes):
+			for j, feature in enumerate(heatmap_features):
+				ax = axes[i][j]
+				df = merged[[outcome, feature]].dropna()
+				if df.shape[0] < 3:
+					ax.axis("off")
+					continue
+				sns.regplot(
+					data=df,
+					x=feature,
+					y=outcome,
+					ax=ax,
+					scatter_kws={"s": 12, "alpha": 0.7},
+					line_kws={"alpha": 0.7},
+				)
+				if i == 0:
+					ax.set_title(str(feature), fontsize=9)
+				if j == 0:
+					ax.set_ylabel(str(outcome), fontsize=9)
+				else:
+					ax.set_ylabel("")
+				ax.set_xlabel("")
+				r_val = corr_map.get((outcome, feature))
+				if r_val is not None and np.isfinite(r_val):
+					ax.text(
+						0.02,
+						0.98,
+						f"r={r_val:.2f}",
+						transform=ax.transAxes,
+						va="top",
+						ha="left",
+						fontsize=8,
+						bbox={"boxstyle": "round,pad=0.2", "facecolor": "white", "alpha": 0.7},
+					)
+
+		fig.tight_layout()
+		plt.savefig(plots_dir / "grid_outcomes_by_features.png", dpi=200)
 		plt.close()
 
 
@@ -482,14 +503,8 @@ def build_argparser() -> argparse.ArgumentParser:
 		default=None,
 		help="Output directory (default: <reports_dir>/analysis_balgrist_out)",
 	)
-	p.add_argument(
-		"--feature-prefixes",
-		type=str,
-		default="canal,csf,discs,foramens,vertebrae",
-		help="Comma-separated feature prefixes to include",
-	)
 	p.add_argument("--min-n", type=int, default=10, help="Minimum number of subjects required per correlation")
-	p.add_argument("--top-k", type=int, default=20, help="Top correlations to plot/export")
+	p.add_argument("--top-k", type=int, default=25, help="Top correlations to plot/export")
 	return p
 
 
@@ -521,10 +536,6 @@ def main() -> None:
 
 	outcomes = select_outcome_columns(readout)
 
-	if not outcomes:
-		raise SystemExit(
-			"No outcome columns selected. Use --severity-regex or --severity-cols to specify outcomes."
-		)
 	print(f"Outcomes: {len(outcomes)}")
 
 	feature_prefixes = ['canal', 'discs', 'foramens']
@@ -536,23 +547,19 @@ def main() -> None:
 			feature_cols=level_feature_cols,
 			min_n=int(args.min_n),
 		)
+		if not level_correlations.empty:
+			for outcome in level_correlations["outcome"].unique():
+				df_o = level_correlations[level_correlations["outcome"] == outcome].copy()
+				df_o.to_csv(
+					outdir / f"correlations__level_specific__{_safe_col(str(outcome))}.csv",
+					index=False,
+				)
 
-	# Write per-outcome CSVs
-	for outcome in correlations["outcome"].unique():
-		df_o = correlations[correlations["outcome"] == outcome].copy()
-		df_o.to_csv(outdir / f"correlations__{_safe_col(str(outcome))}.csv", index=False)
-
-	# Combined top-k CSV
-	top = correlations.copy()
-	top["abs_spearman_r"] = top["spearman_r"].abs()
-	top = top.sort_values(["spearman_q", "spearman_p", "abs_spearman_r"], ascending=[True, True, False])
-	top.head(int(args.top_k)).to_csv(outdir / "top_correlations.csv", index=False)
-
-	# Plots
-	try:
-		save_plots(merged, correlations, outdir=outdir, top_k=int(args.top_k))
-	except Exception as e:
-		print(f"Warning: plotting failed: {e}")
+			# Plots
+			try:
+				save_plots(merged, level_correlations, outdir=outdir, top_k=int(args.top_k))
+			except Exception as e:
+				print(f"Warning: plotting failed: {e}")
 
 	print(f"Wrote outputs to: {outdir}")
 
