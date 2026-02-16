@@ -330,18 +330,47 @@ def add_level_specific_features(
 				level_feature_map[key][match.group("level")] = col
 
 	level_values = merged[level_col].astype(str)
+	side_values = merged["Side"].astype(str)
+	side_dict = {"left":"links", "right":"rechts"}
 	levels_unique = level_values.unique()
 	new_cols: List[str] = []
 	for (prefix, metric), di in level_feature_map.items():
-		new_col = f"{prefix}_{metric}_at_level"
+		if prefix == "foramens" and "surface" in metric:
+			new_col = f"{prefix}_surface_at_level"
+		elif prefix == "foramens" and "assymetry" in metric:
+			new_col = f"{prefix}_assymetry_at_level"
+		else:
+			new_col = f"{prefix}_{metric}_at_level"
 		merged[new_col] = np.nan
 		for level in levels_unique:
 			if level not in di.keys():
 				continue
 			col = di[level]
-			mask = level_values == str(level)
-			if mask.any():
-				merged.loc[mask, new_col] = merged.loc[mask, col]
+			if prefix == "foramens" and "surface" in metric:
+				side_en = metric.split('_')[0]
+				# Inverse foramens (different convention for left/right) to match clinical ratings
+				if side_en.lower() == "right":
+					side_en = "left"
+				else:
+					side_en = "right"
+				side_ger = side_dict[side_en.lower()]
+				mask = (level_values == str(level)) & (side_values.str.lower() == side_ger)
+				if mask.any():
+					merged.loc[mask, new_col] = merged.loc[mask, col]
+			elif prefix == "foramens" and "asymmetry" in metric:
+				for side_en in ["left", "right"]:
+					side_ger = side_dict[side_en.lower()]
+					mask = (level_values == str(level)) & (side_values.str.lower() == side_ger)
+					if mask.any():
+						if side_en.lower() == "right":
+							# Inverse values
+							merged.loc[mask, new_col] = 1/merged.loc[mask, col]
+						else:
+							merged.loc[mask, new_col] = merged.loc[mask, col]
+			else:
+				mask = level_values == str(level)
+				if mask.any():
+					merged.loc[mask, new_col] = merged.loc[mask, col]
 		new_cols.append(new_col)
 
 	return new_cols
