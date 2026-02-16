@@ -457,7 +457,7 @@ def save_plots(
 
 	top = correlations.copy()
 	top["abs_spearman_r"] = top["spearman_r"].abs()
-	top = top.sort_values(["spearman_q", "spearman_p", "abs_spearman_r"], ascending=[True, True, False])
+	top = top.sort_values(["abs_spearman_r", "spearman_q", "spearman_p"], ascending=[False, True, True])
 	top = top.head(top_k)
 
 	# Subplot grid: outcomes as rows, features as columns
