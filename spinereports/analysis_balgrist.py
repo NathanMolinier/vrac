@@ -269,11 +269,18 @@ def load_readout(readout_csv: Path) -> "pd.DataFrame":
 	if "Level" in df.columns:
 		level_numeric = pd.to_numeric(df["Level"], errors="coerce")
 		df["Level"] = level_numeric.map(level_mapping).fillna(df["Level"])
+	
+	# Create columns with averaged reader ratings
+	reader_cols = [c for c in df.columns if "READER" in c and not "Intra" in c and "Senior" in c]
+	for col in reader_cols:
+		df[col.replace('_READER 1 (Senior)', ' ALL')]=(df[col]+df[col.replace('READER 1 (Senior)', 'READER 2 (Junior)')])/2
+
 	return df
 
 
 def select_outcome_columns(
 	readout: "pd.DataFrame",
+	all_only: bool = False,
 ) -> List[str]:
 
 	# Default: focus on stenosis-related columns
@@ -285,11 +292,15 @@ def select_outcome_columns(
 	outcomes: List[str] = []
 	for c in candidates:
 		if pd.api.types.is_numeric_dtype(readout[c]):
+			if all_only and not str(c).lower().endswith("all"):
+				continue
 			outcomes.append(c)
 			continue
 		# Try coercion if parsed as object
 		coerced = pd.to_numeric(readout[c], errors="coerce")
 		if int(coerced.notna().sum()) >= 3:
+			if all_only and not str(c).lower().endswith("all"):
+				continue
 			readout[c] = coerced
 			outcomes.append(c)
 
@@ -543,7 +554,7 @@ def main() -> None:
 	merged.to_csv(outdir / "merged_subject_level.csv", index=False)
 	print(f"Merged subjects: {merged.shape[0]} (readout={readout.shape[0]}, features={features.shape[0]})")
 
-	outcomes = select_outcome_columns(readout)
+	outcomes = select_outcome_columns(readout, all_only=True)
 
 	print(f"Outcomes: {len(outcomes)}")
 
