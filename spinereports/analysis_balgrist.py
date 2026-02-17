@@ -203,7 +203,7 @@ def load_subject_features(reports_dir: Path) -> "pd.DataFrame":
 						canal,
 						prefix="canal",
 						group_col="vertebra_level",
-						stats=("mean", "std", "median"),
+						stats=("mean", "std", "median", "max"),
 						drop_cols=("slice_interp", "structure", "structure_name"),
 					)
 				)
