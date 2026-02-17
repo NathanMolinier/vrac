@@ -100,7 +100,7 @@ def _flatten_grouped_stats(
 	]
 	if not numeric_cols:
 		return out
-	
+
 	df_ordered = (
 		df.sort_values("slice_interp")
 		if "slice_interp" in df.columns
@@ -114,27 +114,52 @@ def _flatten_grouped_stats(
 		for level, val in series.items():
 			key = f"{prefix}_{_safe_col(col)}_{stat_name}_{_safe_col(str(level))}"
 			vertebra_avg[key] = float(val) if pd.notna(val) else np.nan
-	
-	levels = df_ordered["vertebra_level"].to_numpy()
+	out.update(vertebra_avg)
+
+	levels_series = df_ordered["vertebra_level"].astype(str)
+	levels = levels_series.to_numpy()
+
 	for i in range(1, len(levels)):
-		if levels[i] != levels[i - 1]:
-			disc_level = f"{levels[i]}-{levels[i-1]}"
-			for col in numeric_cols:
-				key = f"{prefix}_{disc_level}_{_safe_col(col)}_ratio"
-				val = df_ordered[col].to_numpy()[i]
-				val_prev = df_ordered[col].to_numpy()[i - 1]
-				prev_vertebra_key = f"{prefix}_{_safe_col(col)}_mean_{_safe_col(str(levels[i-1]))}"
-				curr_vertebra_key = f"{prefix}_{_safe_col(col)}_mean_{_safe_col(str(levels[i]))}"
-				if curr_vertebra_key in vertebra_avg and prev_vertebra_key in vertebra_avg:
-					denom = (vertebra_avg[curr_vertebra_key] + vertebra_avg[prev_vertebra_key])
-					out[key] = 2*np.mean([val, val_prev])/denom if denom != 0 else np.nan
-	
+		prev_level = levels[i - 1]
+		curr_level = levels[i]
+		if curr_level == prev_level:
+			continue
+
+		pair_label = _safe_col(f"{prev_level}-{curr_level}")
+		pair_mask = levels_series.isin([prev_level, curr_level]).to_numpy()
+		prev_vert_mask = levels_series.isin([prev_level]).to_numpy()
+		curr_vert_mask = levels_series.isin([curr_level]).to_numpy()
+
+		for col in numeric_cols:
+			x_all = pd.to_numeric(df_ordered["slice_interp"], errors="coerce").to_numpy()
+			y_all = pd.to_numeric(df_ordered[col], errors="coerce").to_numpy()
+			idx_max_prev = x_all[prev_vert_mask][y_all[prev_vert_mask].argmax()]
+			idx_max_curr = x_all[curr_vert_mask][y_all[curr_vert_mask].argmax()]
+
+			valid = pair_mask & (x_all >= idx_max_prev) & (x_all <= idx_max_curr)
+			if int(valid.sum()) < 3:
+				continue
+			x = x_all[valid]
+			y = y_all[valid]
+
+			coeff = np.polyfit(x, y, deg=2)
+			x_dense = np.linspace(x.min(), x.max(), 100)
+			y_dense = np.polyval(coeff, x_dense)
+
+			prev_vertebra_key = f"{prefix}_{_safe_col(col)}_max_{_safe_col(str(levels[i-1]))}"
+			curr_vertebra_key = f"{prefix}_{_safe_col(col)}_max_{_safe_col(str(levels[i]))}"
+
+			if curr_vertebra_key in vertebra_avg and prev_vertebra_key in vertebra_avg:
+				denom = (vertebra_avg[curr_vertebra_key] + vertebra_avg[prev_vertebra_key])
+				out[f"{prefix}_{pair_label}_{_safe_col(col)}_ratio"] = 2*np.min(y_dense)/denom if denom != 0 else np.nan
+		
 	# Approximate L5-S1 level
 	if levels[0] == "L5":
 		for col in numeric_cols:
 			key = f"{prefix}_L5-S1_{_safe_col(col)}_ratio"
-			val = df_ordered[col].to_numpy()[0]
-			denom = vertebra_avg[f"{prefix}_{_safe_col(col)}_mean_L5"]
+			vert_mask = levels_series.isin(['L5']).to_numpy()
+			val = np.min(pd.to_numeric(df_ordered[col], errors="coerce").to_numpy()[vert_mask])
+			denom = vertebra_avg[f"{prefix}_{_safe_col(col)}_max_L5"]
 			out[key] = val/denom if denom != 0 else np.nan 
 
 	return out
