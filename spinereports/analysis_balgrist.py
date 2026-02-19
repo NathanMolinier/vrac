@@ -122,8 +122,8 @@ def _flatten_grouped_stats_canal(
 			for col in numeric_cols:
 				key = f"{prefix}_{disc_level}_{_safe_col(col)}_ratio"
 				val_list = [df_ordered[col].to_numpy()[j] for j in range(i-2, i+2)]
-				prev_vertebra_key = f"{prefix}_{_safe_col(col)}_median_{_safe_col(str(levels[i-1]))}"
-				curr_vertebra_key = f"{prefix}_{_safe_col(col)}_median_{_safe_col(str(levels[i]))}"
+				prev_vertebra_key = f"{prefix}_{_safe_col(col)}_max_{_safe_col(str(levels[i-1]))}"
+				curr_vertebra_key = f"{prefix}_{_safe_col(col)}_max_{_safe_col(str(levels[i]))}"
 				if curr_vertebra_key in vertebra_avg and prev_vertebra_key in vertebra_avg:
 					denom = (vertebra_avg[curr_vertebra_key] + vertebra_avg[prev_vertebra_key])
 					out[key] = 2*np.min(val_list)/denom if denom != 0 else np.nan
@@ -133,7 +133,7 @@ def _flatten_grouped_stats_canal(
 		for col in numeric_cols:
 			key = f"{prefix}_L5-S1_{_safe_col(col)}_ratio"
 			val_list = df_ordered[col].to_numpy()[0:3]
-			denom = vertebra_avg[f"{prefix}_{_safe_col(col)}_median_L5"]
+			denom = vertebra_avg[f"{prefix}_{_safe_col(col)}_max_L5"]
 			out[key] = np.min(val_list)/denom if denom != 0 else np.nan 
 
 	return out
