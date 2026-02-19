@@ -81,7 +81,7 @@ def _read_csv(path: Path) -> "pd.DataFrame":
 	return pd.read_csv(path, sep=",", engine="python")
 
 
-def _flatten_grouped_stats(
+def _flatten_grouped_stats_canal(
 	df: "pd.DataFrame",
 	*,
 	prefix: str,
@@ -121,21 +121,77 @@ def _flatten_grouped_stats(
 			disc_level = f"{levels[i]}-{levels[i-1]}"
 			for col in numeric_cols:
 				key = f"{prefix}_{disc_level}_{_safe_col(col)}_ratio"
-				val = df_ordered[col].to_numpy()[i]
-				val_prev = df_ordered[col].to_numpy()[i - 1]
-				prev_vertebra_key = f"{prefix}_{_safe_col(col)}_mean_{_safe_col(str(levels[i-1]))}"
-				curr_vertebra_key = f"{prefix}_{_safe_col(col)}_mean_{_safe_col(str(levels[i]))}"
+				val_list = [df_ordered[col].to_numpy()[j] for j in range(i-2, i+2)]
+				prev_vertebra_key = f"{prefix}_{_safe_col(col)}_median_{_safe_col(str(levels[i-1]))}"
+				curr_vertebra_key = f"{prefix}_{_safe_col(col)}_median_{_safe_col(str(levels[i]))}"
 				if curr_vertebra_key in vertebra_avg and prev_vertebra_key in vertebra_avg:
 					denom = (vertebra_avg[curr_vertebra_key] + vertebra_avg[prev_vertebra_key])
-					out[key] = 2*np.mean([val, val_prev])/denom if denom != 0 else np.nan
+					out[key] = 2*np.min(val_list)/denom if denom != 0 else np.nan
 	
 	# Approximate L5-S1 level
 	if levels[0] == "L5":
 		for col in numeric_cols:
 			key = f"{prefix}_L5-S1_{_safe_col(col)}_ratio"
-			val = df_ordered[col].to_numpy()[0]
-			denom = vertebra_avg[f"{prefix}_{_safe_col(col)}_mean_L5"]
-			out[key] = val/denom if denom != 0 else np.nan 
+			val_list = df_ordered[col].to_numpy()[0:3]
+			denom = vertebra_avg[f"{prefix}_{_safe_col(col)}_median_L5"]
+			out[key] = np.min(val_list)/denom if denom != 0 else np.nan 
+
+	return out
+
+def _flatten_grouped_stats_csf(
+	df: "pd.DataFrame",
+	*,
+	prefix: str,
+	group_col: str,
+	stats: Sequence[str] = ("mean",),
+	drop_cols: Sequence[str] = (),
+) -> Dict[str, float]:
+	"""Group by `group_col`, compute stats for numeric columns, flatten into dict."""
+	out: Dict[str, float] = {}
+
+	numeric_cols = [
+		c
+		for c in df.columns
+		if c not in set(drop_cols) | {group_col}
+		and pd.api.types.is_numeric_dtype(df[c])
+	]
+	if not numeric_cols:
+		return out
+	
+	df_ordered = (
+		df.sort_values("slice_interp")
+		if "slice_interp" in df.columns
+		else df
+	)
+
+	vertebra_avg = {}
+	grouped = df.groupby(group_col)[numeric_cols].agg(list(stats))
+	# Columns become MultiIndex: (col, stat)
+	for (col, stat_name), series in grouped.items():
+		for level, val in series.items():
+			key = f"{prefix}_{_safe_col(col)}_{stat_name}_{_safe_col(str(level))}"
+			vertebra_avg[key] = float(val) if pd.notna(val) else np.nan
+	
+	levels = df_ordered["vertebra_level"].to_numpy()
+	for i in range(1, len(levels)):
+		if levels[i] != levels[i - 1]:
+			disc_level = f"{levels[i]}-{levels[i-1]}"
+			for col in numeric_cols:
+				key = f"{prefix}_{disc_level}_{_safe_col(col)}_ratio"
+				val_list = [df_ordered[col].to_numpy()[j] for j in range(i-2, i+2)]
+				prev_vertebra_key = f"{prefix}_{_safe_col(col)}_median_{_safe_col(str(levels[i-1]))}"
+				curr_vertebra_key = f"{prefix}_{_safe_col(col)}_median_{_safe_col(str(levels[i]))}"
+				if curr_vertebra_key in vertebra_avg and prev_vertebra_key in vertebra_avg:
+					denom = (vertebra_avg[curr_vertebra_key] + vertebra_avg[prev_vertebra_key])
+					out[key] = np.min(val_list)#/denom if denom != 0 else np.nan
+	
+	# Approximate L5-S1 level
+	if levels[0] == "L5":
+		for col in numeric_cols:
+			key = f"{prefix}_L5-S1_{_safe_col(col)}_ratio"
+			val_list = df_ordered[col].to_numpy()[0:3]
+			denom = vertebra_avg[f"{prefix}_{_safe_col(col)}_median_L5"]
+			out[key] = np.min(val_list)#/denom if denom != 0 else np.nan 
 
 	return out
 
@@ -199,9 +255,26 @@ def load_subject_features(reports_dir: Path) -> "pd.DataFrame":
 			canal = canal[canal["structure_name"] == "canal"]
 			if "vertebra_level" in canal.columns:
 				feat.update(
-					_flatten_grouped_stats(
+					_flatten_grouped_stats_canal(
 						canal,
 						prefix="canal",
+						group_col="vertebra_level",
+						stats=("mean", "std", "median", "max"),
+						drop_cols=("slice_interp", "structure", "structure_name"),
+					)
+				)
+
+		# csf
+		csf_path = files_dir / "csf_subject.csv"
+		if csf_path.exists():
+			csf = _read_csv(csf_path)
+			# Keep only csf lines
+			csf = csf[csf["structure_name"] == "csf"]
+			if "vertebra_level" in csf.columns:
+				feat.update(
+					_flatten_grouped_stats_csf(
+						csf,
+						prefix="csf",
 						group_col="vertebra_level",
 						stats=("mean", "std", "median", "max"),
 						drop_cols=("slice_interp", "structure", "structure_name"),
@@ -217,6 +290,20 @@ def load_subject_features(reports_dir: Path) -> "pd.DataFrame":
 					_rowwise_to_features(
 						discs,
 						prefix="discs",
+						id_col="structure_name",
+						drop_cols=("structure",),
+					)
+				)
+		
+		# vertebrae
+		vertebrae_path = files_dir / "vertebrae_subject.csv"
+		if vertebrae_path.exists():
+			vertebrae = _read_csv(vertebrae_path)
+			if "structure_name" in vertebrae.columns:
+				feat.update(
+					_rowwise_to_features(
+						vertebrae,
+						prefix="vertebrae",
 						id_col="structure_name",
 						drop_cols=("structure",),
 					)
@@ -587,7 +674,7 @@ def main() -> None:
 
 	print(f"Outcomes: {len(outcomes)}")
 
-	feature_prefixes = ['canal', 'discs', 'foramens']
+	feature_prefixes = ['canal', 'csf', 'discs', 'foramens']
 	level_feature_cols = add_level_specific_features(merged, feature_prefixes, level_col="Level")
 	if level_feature_cols:
 		level_correlations = compute_correlations(
