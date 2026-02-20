@@ -294,20 +294,6 @@ def load_subject_features(reports_dir: Path) -> "pd.DataFrame":
 						drop_cols=("structure",),
 					)
 				)
-		
-		# vertebrae
-		vertebrae_path = files_dir / "vertebrae_subject.csv"
-		if vertebrae_path.exists():
-			vertebrae = _read_csv(vertebrae_path)
-			if "structure_name" in vertebrae.columns:
-				feat.update(
-					_rowwise_to_features(
-						vertebrae,
-						prefix="vertebrae",
-						id_col="structure_name",
-						drop_cols=("structure",),
-					)
-				)
 
 		# foramens
 		foramens_path = files_dir / "foramens_subject.csv"
