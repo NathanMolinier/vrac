@@ -318,6 +318,42 @@ def load_subject_features(reports_dir: Path) -> "pd.DataFrame":
 	if not features.empty:
 		# keep `Lfd_Nr` as int-like
 		features["Lfd_Nr"] = features["Lfd_Nr"].astype(int)
+
+	# Create foramens surface ratio by dividing the subject value by the median computed across all subjects.
+	foramen_cols = [
+		c
+		for c in features.columns
+		if c.startswith("foramens_")
+		and re.match(r"^foramens_[^_]+_(left|right)_.+$", c) is not None
+	]
+
+	groups: Dict[tuple[str, str], Dict[str, str]] = {}
+	for col in foramen_cols:
+		match = re.match(r"^foramens_(?P<level>[^_]+)_(?P<side>left|right)_surface", col)
+		if not match:
+			continue
+		level = match.group("level")
+		side = match.group("side")
+		key = level
+		if key not in groups:
+			groups[key] = {}
+		groups[key][side] = col
+
+	for level, side_cols in groups.items():
+		left_col = side_cols.get("left")
+		right_col = side_cols.get("right")
+
+		pooled = pd.concat([features[left_col], features[right_col]], ignore_index=True)
+		pooled_median = pooled.median(skipna=True)
+
+		left_ratio_col = f"foramens_{level}_left_surface_ratio"
+		right_ratio_col = f"foramens_{level}_right_surface_ratio"
+		if pd.notna(pooled_median) and pooled_median != 0:
+			features[left_ratio_col] = features[left_col] / pooled_median
+			features[right_ratio_col] = features[right_col] / pooled_median
+		else:
+			features[left_ratio_col] = np.nan
+			features[right_ratio_col] = np.nan
 	return features
 
 
@@ -408,7 +444,9 @@ def add_level_specific_features(
 	levels_unique = level_values.unique()
 	new_cols: List[str] = []
 	for (prefix, metric), di in level_feature_map.items():
-		if prefix == "foramens" and "surface" in metric:
+		if prefix == "foramens" and "surface_ratio" in metric:
+			new_col = f"{prefix}_surface_ratio_at_level"
+		elif prefix == "foramens" and "surface" in metric:
 			new_col = f"{prefix}_surface_at_level"
 		elif prefix == "foramens" and "assymetry" in metric:
 			new_col = f"{prefix}_assymetry_at_level"
@@ -656,7 +694,7 @@ def main() -> None:
 	merged.to_csv(outdir / "merged_subject_level.csv", index=False)
 	print(f"Merged subjects: {merged.shape[0]} (readout={readout.shape[0]}, features={features.shape[0]})")
 
-	outcomes = select_outcome_columns(readout, all_only=True)
+	outcomes = select_outcome_columns(readout, all_only=False)
 
 	print(f"Outcomes: {len(outcomes)}")
 
