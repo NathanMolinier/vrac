@@ -43,6 +43,7 @@ def _safe_col(col: str) -> str:
 def _bh_fdr(pvals: np.ndarray) -> np.ndarray:
 	"""
 	Benjamini–Hochberg FDR-adjusted p-values.
+	Detects real effects without inflating false positives too much
 	Returns array of same shape with NaNs preserved.
 	"""
 	p = np.asarray(pvals, dtype=float)
