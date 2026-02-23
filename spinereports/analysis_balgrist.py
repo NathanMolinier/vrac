@@ -567,80 +567,76 @@ def save_plots(
 	if correlations.empty:
 		return
 
-	top = correlations.copy()
-	top["abs_spearman_r"] = top["spearman_r"].abs()
-	top = top.sort_values(["abs_spearman_r", "spearman_q", "spearman_p"], ascending=[False, True, True])
-	top = top.head(top_k)
+	for outcome in correlations["outcome"].dropna().unique():
+		df_outcome = correlations[correlations["outcome"] == outcome].copy()
+		if df_outcome.empty:
+			continue
 
-	# Subplot grid: outcomes as rows, features as columns
-	heatmap_outcomes = list(top["outcome"].unique())
-	heatmap_features = list(top["feature"].unique())
-	if heatmap_outcomes and heatmap_features:
+		df_outcome["abs_spearman_r"] = df_outcome["spearman_r"].abs()
+		df_outcome = df_outcome.sort_values(
+			["abs_spearman_r", "spearman_q", "spearman_p"],
+			ascending=[False, True, True],
+		).head(top_k)
+
+		features = list(df_outcome["feature"].dropna().unique())[:3]
+		if not features:
+			continue
+
 		fig, axes = plt.subplots(
-			nrows=len(heatmap_outcomes),
-			ncols=len(heatmap_features),
-			figsize=(3.2 * len(heatmap_features), 2.8 * len(heatmap_outcomes)),
+			nrows=1,
+			ncols=len(features),
+			figsize=(3.4 * len(features), 3.2),
 			sharex=False,
 			sharey=False,
 		)
-		if len(heatmap_outcomes) == 1 and len(heatmap_features) == 1:
-			axes = np.array([[axes]])
-		elif len(heatmap_outcomes) == 1:
+		if len(features) == 1:
 			axes = np.array([axes])
-		elif len(heatmap_features) == 1:
-			axes = np.array([[ax] for ax in axes])
 
-		corr_map = {
-			(row["outcome"], row["feature"]): row["spearman_r"]
-			for _, row in correlations.iterrows()
-		}
-		q_map = {
-			(row["outcome"], row["feature"]): row["spearman_q"]
-			for _, row in correlations.iterrows()
-		}
-		for i, outcome in enumerate(heatmap_outcomes):
-			for j, feature in enumerate(heatmap_features):
-				ax = axes[i][j]
-				df = merged[[outcome, feature]].dropna()
-				if df.shape[0] < 3:
-					ax.axis("off")
-					continue
-				sns.regplot(
-					data=df,
-					x=feature,
-					y=outcome,
-					ax=ax,
-					scatter_kws={"s": 12, "alpha": 0.7},
-					line_kws={"alpha": 0.7},
+		corr_map = {row["feature"]: row["spearman_r"] for _, row in df_outcome.iterrows()}
+		q_map = {row["feature"]: row["spearman_q"] for _, row in df_outcome.iterrows()}
+
+		for j, feature in enumerate(features):
+			ax = axes[j]
+			df_plot = merged[[outcome, feature]].dropna()
+			if df_plot.shape[0] < 3:
+				ax.axis("off")
+				continue
+			sns.scatterplot(
+				data=df_plot,
+				x=feature,
+				y=outcome,
+				ax=ax,
+				s=12,
+				alpha=0.7,
+			)
+			ax.set_title(str(feature), fontsize=9)
+			if j == 0:
+				ax.set_ylabel(str(outcome), fontsize=9)
+			else:
+				ax.set_ylabel("")
+			ax.set_xlabel("")
+
+			r_val = corr_map.get(feature)
+			q_val = q_map.get(feature)
+			if r_val is not None and np.isfinite(r_val):
+				ax.text(
+					0.02,
+					0.98,
+					f"r={r_val:.2f}\nq={q_val:.3g}" if q_val is not None else f"r={r_val:.2f}",
+					transform=ax.transAxes,
+					va="top",
+					ha="left",
+					fontsize=8,
+					bbox={"boxstyle": "round,pad=0.2", "facecolor": "white", "alpha": 0.7},
 				)
-				if i == 0:
-					ax.set_title(str(feature), fontsize=9)
-				if j == 0:
-					ax.set_ylabel(str(outcome), fontsize=9)
-				else:
-					ax.set_ylabel("")
-				ax.set_xlabel("")
-				r_val = corr_map.get((outcome, feature))
-				q_val = q_map.get((outcome, feature))
-				if r_val is not None and np.isfinite(r_val):
-					ax.text(
-						0.02,
-						0.98,
-						f"r={r_val:.2f}\nq={q_val:.3g}" if q_val is not None else f"r={r_val:.2f}",
-						transform=ax.transAxes,
-						va="top",
-						ha="left",
-						fontsize=8,
-						bbox={"boxstyle": "round,pad=0.2", "facecolor": "white", "alpha": 0.7},
-					)
-				if q_val is not None and np.isfinite(q_val) and q_val < 0.05:
-					for spine in ax.spines.values():
-						spine.set_edgecolor("red")
-						spine.set_linewidth(2.0)
+			if q_val is not None and np.isfinite(q_val) and q_val < 0.05:
+				for spine in ax.spines.values():
+					spine.set_edgecolor("red")
+					spine.set_linewidth(2.0)
 
 		fig.tight_layout()
-		plt.savefig(plots_dir / "grid_outcomes_by_features.png", dpi=200)
-		plt.close()
+		plt.savefig(plots_dir / f"outcome__{_safe_col(str(outcome))}.png", dpi=200)
+		plt.close(fig)
 
 
 def build_argparser() -> argparse.ArgumentParser:
