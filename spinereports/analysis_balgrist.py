@@ -24,6 +24,7 @@ Written to `--outdir` (default: `<reports>/analysis_balgrist_out`):
 from __future__ import annotations
 
 import argparse
+import importlib
 import re
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence
@@ -551,6 +552,96 @@ def compute_correlations(
 	return res
 
 
+def compute_ordinal_logit(
+	merged: "pd.DataFrame",
+	outcomes: Sequence[str],
+	feature_cols: Optional[Sequence[str]],
+	min_n: int,
+) -> "pd.DataFrame":
+	"""Univariate ordinal logistic regression (proportional odds) per outcome/feature."""
+	try:
+		ordinal_module = importlib.import_module("statsmodels.miscmodels.ordinal_model")
+		OrderedModel = getattr(ordinal_module, "OrderedModel")
+	except Exception:
+		print("Warning: statsmodels is not available; skipping ordinal logistic regression")
+		return pd.DataFrame()
+
+	if not feature_cols:
+		return pd.DataFrame()
+
+	results: List[Dict[str, object]] = []
+	for outcome in outcomes:
+		y_full = pd.to_numeric(merged[outcome], errors="coerce")
+		for feature in feature_cols:
+			x_full = pd.to_numeric(merged[feature], errors="coerce")
+			mask = x_full.notna() & y_full.notna()
+			n = int(mask.sum())
+			if n < min_n:
+				continue
+
+			df = pd.DataFrame(
+				{
+					"x": x_full[mask].astype(float),
+					"y": y_full[mask].astype(float),
+				}
+			).dropna()
+			if df.shape[0] < min_n:
+				continue
+
+			# Need at least 2 ordered classes
+			y_unique = np.sort(df["y"].unique())
+			if y_unique.size < 2:
+				continue
+
+			x_std = float(df["x"].std(ddof=0))
+			if not np.isfinite(x_std) or x_std == 0:
+				continue
+
+			df["x_z"] = (df["x"] - float(df["x"].mean())) / x_std
+			y_ord = pd.Categorical(df["y"], categories=y_unique, ordered=True)
+
+			try:
+				model = OrderedModel(y_ord, df[["x_z"]], distr="logit")
+				fit = model.fit(method="bfgs", disp=False)
+			except Exception:
+				continue
+
+			coef = float(fit.params.get("x_z", np.nan))
+			se = float(fit.bse.get("x_z", np.nan))
+			z_val = float(fit.tvalues.get("x_z", np.nan))
+			p_val = float(fit.pvalues.get("x_z", np.nan))
+			or_val = float(np.exp(coef)) if np.isfinite(coef) else np.nan
+
+			results.append(
+				{
+					"outcome": outcome,
+					"feature": feature,
+					"n": int(df.shape[0]),
+					"n_classes": int(y_unique.size),
+					"coef_log_odds_per_sd": coef,
+					"odds_ratio_per_sd": or_val,
+					"se": se,
+					"z": z_val,
+					"p": p_val,
+					"aic": float(getattr(fit, "aic", np.nan)),
+					"bic": float(getattr(fit, "bic", np.nan)),
+					"llf": float(getattr(fit, "llf", np.nan)),
+				}
+			)
+
+	res = pd.DataFrame(results)
+	if res.empty:
+		return res
+
+	res["q"] = np.nan
+	for outcome in res["outcome"].unique():
+		idx = res["outcome"] == outcome
+		res.loc[idx, "q"] = _bh_fdr(res.loc[idx, "p"].to_numpy())
+
+	res = res.sort_values(["outcome", "q", "p"], ascending=[True, True, True])
+	return res
+
+
 def save_plots(
 	merged: "pd.DataFrame",
 	correlations: "pd.DataFrame",
@@ -717,6 +808,20 @@ def main() -> None:
 				save_plots(merged, level_correlations, outdir=outdir, top_k=int(args.top_k))
 			except Exception as e:
 				print(f"Warning: plotting failed: {e}")
+
+		level_ordinal = compute_ordinal_logit(
+			merged,
+			outcomes=outcomes,
+			feature_cols=level_feature_cols,
+			min_n=int(args.min_n),
+		)
+		if not level_ordinal.empty:
+			for outcome in level_ordinal["outcome"].unique():
+				df_o = level_ordinal[level_ordinal["outcome"] == outcome].copy()
+				df_o.to_csv(
+					outdir / f"ordinal_logit__level_specific__{_safe_col(str(outcome))}.csv",
+					index=False,
+				)
 
 	print(f"Wrote outputs to: {outdir}")
 
