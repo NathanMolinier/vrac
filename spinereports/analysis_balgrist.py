@@ -656,6 +656,91 @@ def compute_ordinal_logit(
 	return res
 
 
+def compute_auc_regrouped_binary(
+	merged: "pd.DataFrame",
+	outcomes: Sequence[str],
+	feature_cols: Optional[Sequence[str]],
+	min_n: int,
+) -> "pd.DataFrame":
+	"""Compute ROC AUC per outcome/feature for regrouped severity: 0-1 vs 2-3."""
+	if not feature_cols:
+		return pd.DataFrame()
+
+	low_levels = {0, 1}
+	high_levels = {2, 3}
+
+	results: List[Dict[str, object]] = []
+	for outcome in outcomes:
+		y_full = pd.to_numeric(merged[outcome], errors="coerce")
+		for feature in feature_cols:
+			x_full = pd.to_numeric(merged[feature], errors="coerce")
+			mask = x_full.notna() & y_full.notna()
+			if int(mask.sum()) < min_n:
+				continue
+
+			df = pd.DataFrame({"x": x_full[mask].astype(float), "y": y_full[mask].astype(float)}).dropna()
+			if df.shape[0] < min_n:
+				continue
+
+			df = df[df["y"].isin(low_levels | high_levels)].copy()
+			if df.empty:
+				continue
+
+			df["y_bin"] = df["y"].isin(high_levels).astype(int)
+			n_list = [int((df["y_bin"] == 0).sum()), int((df["y_bin"] == 1).sum())]
+			n = int(df.shape[0])
+			if n < min_n or n_list[0] < 2 or n_list[1] < 2:
+				continue
+
+			try:
+				u_stat, p_val = stats.mannwhitneyu(
+					df.loc[df["y_bin"] == 1, "x"].to_numpy(),
+					df.loc[df["y_bin"] == 0, "x"].to_numpy(),
+					alternative="two-sided",
+				)
+				auc = float(u_stat / (n_list[1] * n_list[0])) # Mann-Whitney U statistic can be interpreted as AUC for binary classification
+				if auc < 0.5:
+					u_stat, p_val = stats.mannwhitneyu(
+						df.loc[df["y_bin"] == 0, "x"].to_numpy(),
+						df.loc[df["y_bin"] == 1, "x"].to_numpy(),
+						alternative="two-sided",
+					)
+					auc = float(u_stat / (n_list[1] * n_list[0]))
+					n_pos = n_list[0]
+					n_neg = n_list[1]
+				else:
+					n_pos = n_list[1]
+					n_neg = n_list[0]
+			except Exception:
+				auc = np.nan
+				p_val = np.nan
+
+			results.append(
+				{
+					"outcome": outcome,
+					"feature": feature,
+					"n": n,
+					"n_low": n_neg,
+					"n_high": n_pos,
+					"auc": auc,
+					"p": float(p_val) if pd.notna(p_val) else np.nan,
+				}
+			)
+
+	res = pd.DataFrame(results)
+	if res.empty:
+		return res
+
+	res["q"] = np.nan
+	for outcome in res["outcome"].unique():
+		idx = res["outcome"] == outcome
+		res.loc[idx, "q"] = _bh_fdr(res.loc[idx, "p"].to_numpy())
+
+	res["abs_auc_from_chance"] = (res["auc"] - 0.5).abs()
+	res = res.sort_values(["outcome", "q", "abs_auc_from_chance"], ascending=[True, True, False])
+	return res
+
+
 def save_plots(
 	merged: "pd.DataFrame",
 	correlations: "pd.DataFrame",
@@ -834,6 +919,20 @@ def main() -> None:
 				df_o = level_ordinal[level_ordinal["outcome"] == outcome].copy()
 				df_o.to_csv(
 					outdir / f"ordinal_logit__level_specific__{_safe_col(str(outcome))}.csv",
+					index=False,
+				)
+
+		level_auc = compute_auc_regrouped_binary(
+			merged,
+			outcomes=outcomes,
+			feature_cols=level_feature_cols,
+			min_n=int(args.min_n),
+		)
+		if not level_auc.empty:
+			for outcome in level_auc["outcome"].unique():
+				df_o = level_auc[level_auc["outcome"] == outcome].copy()
+				df_o.to_csv(
+					outdir / f"auc_binary_01_vs_23__level_specific__{_safe_col(str(outcome))}.csv",
 					index=False,
 				)
 
