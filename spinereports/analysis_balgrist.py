@@ -464,8 +464,8 @@ def add_level_specific_features(
 			new_col = f"{prefix}_surface_ratio_at_level"
 		elif prefix == "foramens" and "surface" in metric:
 			new_col = f"{prefix}_surface_at_level"
-		elif prefix == "foramens" and "assymetry" in metric:
-			new_col = f"{prefix}_assymetry_at_level"
+		elif prefix == "foramens" and "asymmetry" in metric:
+			new_col = f"{prefix}_asymmetry_at_level"
 		else:
 			new_col = f"{prefix}_{metric}_at_level"
 		merged[new_col] = np.nan
