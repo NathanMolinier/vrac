@@ -327,6 +327,11 @@ def load_subject_features(reports_dir: Path) -> "pd.DataFrame":
 
 		rows.append(feat)
 
+		# Extract vertebrae size for normalization
+		vertebrae_path = files_dir / "vertebrae_subject.csv"
+		if vertebrae_path.exists():
+			vertebrae_df = _read_csv(vertebrae_path)
+
 	if missing:
 		print(f"Warning: missing files dirs for {len(missing)} subject(s)")
 
@@ -367,6 +372,21 @@ def load_subject_features(reports_dir: Path) -> "pd.DataFrame":
 		if pd.notna(pooled_median) and pooled_median != 0:
 			features[left_ratio_col] = features[left_col] / pooled_median
 			features[right_ratio_col] = features[right_col] / pooled_median
+		else:
+			features[left_ratio_col] = np.nan
+			features[right_ratio_col] = np.nan
+		
+		left_ratio_col = f"foramens_{level}_left_surface_vertebrae_ratio"
+		right_ratio_col = f"foramens_{level}_right_surface_vertebrae_ratio"
+		top_vert = level.split('-')[0]
+		top_volume = vertebrae_df["volume"][vertebrae_df["structure_name"] == top_vert]
+		if  len(top_volume) != 0:
+			if pd.notna(top_volume).all() and top_volume.values[0] != 0:
+				features[left_ratio_col] = features[left_col] / (top_volume.values[0])**(2/3)
+				features[right_ratio_col] = features[right_col] / (top_volume.values[0])**(2/3)
+			else:
+				features[left_ratio_col] = np.nan
+				features[right_ratio_col] = np.nan
 		else:
 			features[left_ratio_col] = np.nan
 			features[right_ratio_col] = np.nan
