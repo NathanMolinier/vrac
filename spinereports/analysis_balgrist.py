@@ -765,93 +765,200 @@ def compute_auc_regrouped_binary(
 	res = res.sort_values(["outcome", "q", "abs_auc_from_chance"], ascending=[True, True, False])
 	return res
 
-
-def save_plots(
-	merged: "pd.DataFrame",
+def merge_results_tables(
 	correlations: "pd.DataFrame",
+	ordinal: "pd.DataFrame",
+	auc: "pd.DataFrame",
 	*,
-	outdir: Path,
-	top_k: int,
-) -> None:
-	import matplotlib.pyplot as plt
-	import seaborn as sns
-
-	plots_dir = outdir / "plots"
-	plots_dir.mkdir(parents=True, exist_ok=True)
+	level_key: str,
+	sex_key: str,
+	side_key: str,
+) -> "pd.DataFrame":
+	base_cols = ["outcome", "feature"]
 
 	if correlations.empty:
+		merged = pd.DataFrame(columns=base_cols)
+	else:
+		merged = correlations.rename(columns={"n": "n_corr"}).copy()
+
+	if not ordinal.empty:
+		ord_df = ordinal.rename(columns={"n": "n_ordinal", "q": "ordinal_q", "p": "ordinal_p"}).copy()
+		merged = merged.merge(ord_df, on=base_cols, how="outer") if not merged.empty else ord_df
+
+	if not auc.empty:
+		auc_df = auc.rename(columns={"n": "n_auc", "q": "auc_q", "p": "auc_p"}).copy()
+		merged = merged.merge(auc_df, on=base_cols, how="outer") if not merged.empty else auc_df
+
+	if merged.empty:
+		merged = pd.DataFrame(columns=["outcome", "feature"])
+
+	merged["level_group"] = level_key
+	merged["sex_group"] = sex_key
+	merged["side_group"] = side_key
+
+	order_cols = [
+		"level_group",
+		"sex_group",
+		"side_group",
+		"outcome",
+		"feature",
+		"n_corr",
+		"spearman_r",
+		"spearman_p",
+		"spearman_q",
+		"pearson_r",
+		"pearson_p",
+		"pearson_q",
+		"n_ordinal",
+		"n_classes",
+		"coef_log_odds_per_sd",
+		"odds_ratio_per_sd",
+		"se",
+		"z",
+		"ordinal_p",
+		"ordinal_q",
+		"aic",
+		"bic",
+		"llf",
+		"n_auc",
+		"n_low",
+		"n_high",
+		"auc",
+		"auc_p",
+		"auc_q",
+		"abs_auc_from_chance",
+	]
+	available_cols = [c for c in order_cols if c in merged.columns]
+	remaining_cols = [c for c in merged.columns if c not in set(available_cols)]
+	merged = merged[available_cols + remaining_cols]
+
+	if "spearman_q" in merged.columns and "spearman_p" in merged.columns:
+		merged = merged.sort_values(["spearman_q", "spearman_p"], ascending=[True, True], na_position="last")
+
+	return merged
+
+
+def save_top3_metrics_table_figure(
+	results_df: "pd.DataFrame",
+	*,
+	config_name: str,
+	outdir: Path,
+) -> None:
+	import matplotlib.pyplot as plt
+	from matplotlib import cm
+
+	if results_df.empty or "spearman_r" not in results_df.columns:
 		return
 
-	for outcome in correlations["outcome"].dropna().unique():
-		df_outcome = correlations[correlations["outcome"] == outcome].copy()
-		if df_outcome.empty:
-			continue
+	top = results_df.copy()
+	top = top[top["spearman_r"].notna()]
+	if top.empty:
+		return
 
-		df_outcome["abs_spearman_r"] = df_outcome["spearman_r"].abs()
-		df_outcome = df_outcome.sort_values(
-			["abs_spearman_r", "spearman_q", "spearman_p"],
-			ascending=[False, True, True],
-		).head(top_k)
+	top["abs_spearman_r"] = top["spearman_r"].abs()
+	sort_cols = [c for c in ["outcome", "abs_spearman_r", "spearman_q", "spearman_p"] if c in top.columns]
+	asc_map = {"outcome": True, "abs_spearman_r": False, "spearman_q": True, "spearman_p": True}
+	top = top.sort_values(sort_cols, ascending=[asc_map[c] for c in sort_cols], na_position="last")
+	if "outcome" in top.columns:
+		top = top.groupby("outcome", group_keys=False).head(3).copy()
+	else:
+		top = top.head(3).copy()
 
-		features = list(df_outcome["feature"].dropna().unique())[:3]
-		if not features:
-			continue
+	def _fmt(val: object) -> str:
+		if pd.isna(val):
+			return ""
+		try:
+			v = float(val)
+			if abs(v) >= 1000:
+				return f"{v:.0f}"
+			if abs(v) >= 1:
+				return f"{v:.3f}"
+			return f"{v:.3g}"
+		except Exception:
+			return str(val)
 
-		fig, axes = plt.subplots(
-			nrows=1,
-			ncols=len(features),
-			figsize=(3.4 * len(features), 3.2),
-			sharex=False,
-			sharey=False,
+	table_cols = [
+		"outcome",
+		"feature",
+		"n_corr",
+		"spearman_r",
+		"spearman_q",
+		"pearson_r",
+		"odds_ratio_per_sd",
+		"auc",
+	]
+	available = [c for c in table_cols if c in top.columns]
+	if not available:
+		return
+
+	table_df = top[available].copy()
+	for c in table_df.columns:
+		if c not in {"outcome", "feature"}:
+			table_df[c] = table_df[c].map(_fmt)
+
+	fig_height = 1.4 + 0.35 * len(table_df)
+	char_lengths = {
+		col: max(
+			len(str(col)),
+			int(table_df[col].astype(str).map(len).max()) if len(table_df) > 0 else len(str(col)),
 		)
-		if len(features) == 1:
-			axes = np.array([axes])
+		for col in table_df.columns
+	}
+	fig_width = max(14.0, 0.12 * sum(char_lengths.values()) + 2.0)
+	fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+	ax.axis("off")
+	ax.set_title(f"Top 3 correlation scores per outcome - {config_name}", fontsize=10, pad=8)
 
-		corr_map = {row["feature"]: row["spearman_r"] for _, row in df_outcome.iterrows()}
-		q_map = {row["feature"]: row["spearman_q"] for _, row in df_outcome.iterrows()}
+	tbl = ax.table(
+		cellText=table_df.values,
+		colLabels=table_df.columns,
+		cellLoc="center",
+		loc="center",
+	)
+	tbl.auto_set_font_size(False)
+	tbl.set_fontsize(8)
+	tbl.scale(1.0, 1.15)
 
-		for j, feature in enumerate(features):
-			ax = axes[j]
-			df_plot = merged[[outcome, feature]].dropna()
-			if df_plot.shape[0] < 3:
-				ax.axis("off")
-				continue
-			sns.scatterplot(
-				data=df_plot,
-				x=feature,
-				y=outcome,
-				ax=ax,
-				s=12,
-				alpha=0.7,
-			)
-			ax.set_title(str(feature), fontsize=9)
-			if j == 0:
-				ax.set_ylabel(str(outcome), fontsize=9)
+	col_names = list(table_df.columns)
+	n_cols = len(col_names)
+	if n_cols > 0:
+		outcome_idx = col_names.index("outcome") if "outcome" in col_names else None
+		feature_idx = col_names.index("feature") if "feature" in col_names else None
+
+		weights = np.array([max(6, char_lengths.get(col, 6)) for col in col_names], dtype=float)
+		if outcome_idx is not None:
+			weights[outcome_idx] *= 1.25
+		if feature_idx is not None:
+			weights[feature_idx] *= 1.6
+		col_widths = (weights / weights.sum()).tolist()
+
+		outcomes_unique = list(pd.unique(table_df["outcome"].astype(str))) if "outcome" in table_df.columns else []
+		cmap = cm.get_cmap("Set3", max(1, len(outcomes_unique)))
+		outcome_color = {
+			outcome: (*cmap(i)[:3], 0.35)
+			for i, outcome in enumerate(outcomes_unique)
+		}
+
+		for (row_idx, col_idx), cell in tbl.get_celld().items():
+			cell.set_width(col_widths[col_idx])
+			if row_idx == 0:
+				cell.set_facecolor((0.90, 0.90, 0.90, 1.0))
+				cell.get_text().set_weight("bold")
+			elif "outcome" in table_df.columns:
+				outcome_val = str(table_df.iloc[row_idx - 1]["outcome"])
+				cell.set_facecolor(outcome_color.get(outcome_val, (1, 1, 1, 1)))
+
+			if outcome_idx is not None and col_idx == outcome_idx:
+				cell.get_text().set_ha("left")
+			elif feature_idx is not None and col_idx == feature_idx:
+				cell.get_text().set_ha("left")
 			else:
-				ax.set_ylabel("")
-			ax.set_xlabel("")
+				cell.get_text().set_ha("center")
 
-			r_val = corr_map.get(feature)
-			q_val = q_map.get(feature)
-			if r_val is not None and np.isfinite(r_val):
-				ax.text(
-					0.02,
-					0.98,
-					f"r={r_val:.2f}\nq={q_val:.3g}" if q_val is not None else f"r={r_val:.2f}",
-					transform=ax.transAxes,
-					va="top",
-					ha="left",
-					fontsize=8,
-					bbox={"boxstyle": "round,pad=0.2", "facecolor": "white", "alpha": 0.7},
-				)
-			if q_val is not None and np.isfinite(q_val) and q_val < 0.05:
-				for spine in ax.spines.values():
-					spine.set_edgecolor("red")
-					spine.set_linewidth(2.0)
-
-		fig.tight_layout()
-		plt.savefig(plots_dir / f"outcome__{_safe_col(str(outcome))}.png", dpi=200)
-		plt.close(fig)
+	fig.tight_layout()
+	fig_path = outdir / f"top3_metrics_table__{_safe_col(config_name)}.png"
+	plt.savefig(fig_path, dpi=250)
+	plt.close(fig)
 
 
 def build_argparser() -> argparse.ArgumentParser:
@@ -901,65 +1008,90 @@ def main() -> None:
 
 	if features.empty:
 		raise SystemExit(f"No subject features found under: {reports_dir}")
+	
+	# Compute statistics at specific level
+	level_mask_dict = {
+		"all_levels": pd.Series([True] * len(readout)),
+		"L5-S1": readout["Level"] == "L5-S1",
+		"no_L5-S1": readout["Level"] != "L5-S1",
+	}
+	
+	# Compute statistics by sex
+	sex_mask_dict = {
+		"all_sexes": pd.Series([True] * len(readout)),
+		"male": readout["sex"] == 1, # (1:male)
+		"female": readout["sex"] == 2, # (2:female)
+	}
 
-	merged = readout.merge(features, on="Lfd_Nr", how="inner")
-	merged.to_csv(outdir / "merged_subject_level.csv", index=False)
-	print(f"Merged subjects: {merged.shape[0]} (readout={readout.shape[0]}, features={features.shape[0]})")
+	# Compute statistics by side
+	side_mask_dict = {
+		"all_sides": pd.Series([True] * len(readout)),
+		"left": readout["Side"] == "links", # or "links"
+		"right": readout["Side"] == "rechts", # or "rechts"
+	}
 
-	outcomes = select_outcome_columns(readout, all_only=False)
+	for level_key, level_mask in level_mask_dict.items():
+		for sex_key, sex_mask in sex_mask_dict.items():
+			for side_key, side_mask in side_mask_dict.items():
+				config_name = f"{level_key}__{sex_key}__{side_key}"
+				mask = level_mask & sex_mask & side_mask
+				readout_config = readout.loc[mask].copy()
+				if readout_config.empty:
+					print(f"Skipping empty configuration: {config_name}")
+					continue
 
-	print(f"Outcomes: {len(outcomes)}")
-
-	feature_prefixes = ['canal', 'csf', 'discs', 'foramens']
-	level_feature_cols = add_level_specific_features(merged, feature_prefixes, level_col="Level")
-	if level_feature_cols:
-		level_correlations = compute_correlations(
-			merged,
-			outcomes=outcomes,
-			feature_cols=level_feature_cols,
-			min_n=int(args.min_n),
-		)
-		if not level_correlations.empty:
-			for outcome in level_correlations["outcome"].unique():
-				df_o = level_correlations[level_correlations["outcome"] == outcome].copy()
-				df_o.to_csv(
-					outdir / f"correlations__level_specific__{_safe_col(str(outcome))}.csv",
-					index=False,
+				merged = readout_config.merge(features, on="Lfd_Nr", how="inner")
+				merged.to_csv(outdir / f"merged_subject_level__{_safe_col(config_name)}.csv", index=False)
+				print(
+					f"[{config_name}] Merged subjects: {merged.shape[0]} "
+					f"(readout={readout_config.shape[0]}, features={features.shape[0]})"
 				)
 
-			# Plots
-			try:
-				save_plots(merged, level_correlations, outdir=outdir, top_k=int(args.top_k))
-			except Exception as e:
-				print(f"Warning: plotting failed: {e}")
+				outcomes = select_outcome_columns(readout_config, all_only=False)
 
-		level_ordinal = compute_ordinal_logit(
-			merged,
-			outcomes=outcomes,
-			feature_cols=level_feature_cols,
-			min_n=int(args.min_n),
-		)
-		if not level_ordinal.empty:
-			for outcome in level_ordinal["outcome"].unique():
-				df_o = level_ordinal[level_ordinal["outcome"] == outcome].copy()
-				df_o.to_csv(
-					outdir / f"ordinal_logit__level_specific__{_safe_col(str(outcome))}.csv",
-					index=False,
+				print(f"[{config_name}] Outcomes: {len(outcomes)}")
+
+				feature_prefixes = ['canal', 'csf', 'discs', 'foramens']
+				level_feature_cols = add_level_specific_features(merged, feature_prefixes, level_col="Level")
+				level_correlations = compute_correlations(
+					merged,
+					outcomes=outcomes,
+					feature_cols=level_feature_cols,
+					min_n=int(args.min_n),
 				)
 
-		level_auc = compute_auc_regrouped_binary(
-			merged,
-			outcomes=outcomes,
-			feature_cols=level_feature_cols,
-			min_n=int(args.min_n),
-		)
-		if not level_auc.empty:
-			for outcome in level_auc["outcome"].unique():
-				df_o = level_auc[level_auc["outcome"] == outcome].copy()
-				df_o.to_csv(
-					outdir / f"auc_binary_01_vs_23__level_specific__{_safe_col(str(outcome))}.csv",
-					index=False,
+				level_ordinal = compute_ordinal_logit(
+					merged,
+					outcomes=outcomes,
+					feature_cols=level_feature_cols,
+					min_n=int(args.min_n),
 				)
+
+				level_auc = compute_auc_regrouped_binary(
+					merged,
+					outcomes=outcomes,
+					feature_cols=level_feature_cols,
+					min_n=int(args.min_n),
+				)
+
+				combined_results = merge_results_tables(
+					level_correlations,
+					level_ordinal,
+					level_auc,
+					level_key=level_key,
+					sex_key=sex_key,
+					side_key=side_key,
+				)
+
+				combined_path = outdir / f"analysis_metrics__{_safe_col(config_name)}.csv"
+				combined_results.to_csv(combined_path, index=False)
+
+				save_top3_metrics_table_figure(
+					combined_results,
+					config_name=config_name,
+					outdir=outdir,
+				)
+				print(f"[{config_name}] Wrote: {combined_path}")
 
 	print(f"Wrote outputs to: {outdir}")
 
