@@ -480,46 +480,51 @@ def add_level_specific_features(
 	levels_unique = level_values.unique()
 	new_cols: List[str] = []
 	for (prefix, metric), di in level_feature_map.items():
-		if prefix == "foramens" and "surface_ratio" in metric:
-			new_col = f"{prefix}_surface_ratio_at_level"
-		elif prefix == "foramens" and "surface" in metric:
-			new_col = f"{prefix}_surface_at_level"
-		elif prefix == "foramens" and "asymmetry" in metric:
-			new_col = f"{prefix}_asymmetry_at_level"
+		if prefix == "foramens":
+			if "surface_ratio" in metric:
+				new_col = f"{prefix}_surface_ratio_at_level"
+			elif "vertebrae_ratio" in metric:
+				new_col = f"{prefix}_surface_vertebrae_ratio_at_level"
+			elif "surface" in metric:
+				new_col = f"{prefix}_surface_at_level"
+			elif "asymmetry" in metric:
+				new_col = f"{prefix}_asymmetry_at_level"
 		else:
 			new_col = f"{prefix}_{metric}_at_level"
-		merged[new_col] = np.nan
+		if not new_col in merged.columns:
+			merged[new_col] = np.nan
 		for level in levels_unique:
 			if level not in di.keys():
 				continue
 			col = di[level]
-			if prefix == "foramens" and "surface" in metric:
-				side_en = metric.split('_')[0]
-				# Inverse foramens (different convention for left/right) to match clinical ratings
-				if side_en.lower() == "right":
-					side_en = "left"
-				else:
-					side_en = "right"
-				side_ger = side_dict[side_en.lower()]
-				mask = (level_values == str(level)) & (side_values.str.lower() == side_ger)
-				if mask.any():
-					merged.loc[mask, new_col] = merged.loc[mask, col]
-			elif prefix == "foramens" and "asymmetry" in metric:
-				for side_en in ["left", "right"]:
+			if prefix == "foramens":
+				if "surface" in metric:
+					side_en = metric.split('_')[0]
+					# Inverse foramens (different convention for left/right) to match clinical ratings
+					if side_en.lower() == "right":
+						side_en = "left"
+					else:
+						side_en = "right"
 					side_ger = side_dict[side_en.lower()]
 					mask = (level_values == str(level)) & (side_values.str.lower() == side_ger)
 					if mask.any():
-						if side_en.lower() == "right":
-							# Inverse values
-							merged.loc[mask, new_col] = 1/merged.loc[mask, col]
-						else:
-							merged.loc[mask, new_col] = merged.loc[mask, col]
+						merged.loc[mask, new_col] = merged.loc[mask, col]
+				elif "asymmetry" in metric:
+					for side_en in ["left", "right"]:
+						side_ger = side_dict[side_en.lower()]
+						mask = (level_values == str(level)) & (side_values.str.lower() == side_ger)
+						if mask.any():
+							if side_en.lower() == "right":
+								# Inverse values
+								merged.loc[mask, new_col] = 1/merged.loc[mask, col]
+							else:
+								merged.loc[mask, new_col] = merged.loc[mask, col]
 			else:
 				mask = level_values == str(level)
 				if mask.any():
 					merged.loc[mask, new_col] = merged.loc[mask, col]
-		new_cols.append(new_col)
-
+		if not new_col in new_cols:
+			new_cols.append(new_col)
 	return new_cols
 
 
