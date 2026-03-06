@@ -883,9 +883,10 @@ def save_top3_metrics_table_figure(
 		"n_corr",
 		"spearman_r",
 		"spearman_q",
-		"pearson_r",
 		"odds_ratio_per_sd",
+		"ordinal_q",
 		"auc",
+		"auc_q"
 	]
 	available = [c for c in table_cols if c in top.columns]
 	if not available:
@@ -926,10 +927,6 @@ def save_top3_metrics_table_figure(
 		feature_idx = col_names.index("feature") if "feature" in col_names else None
 
 		weights = np.array([max(6, char_lengths.get(col, 6)) for col in col_names], dtype=float)
-		if outcome_idx is not None:
-			weights[outcome_idx] *= 1.25
-		if feature_idx is not None:
-			weights[feature_idx] *= 1.6
 		col_widths = (weights / weights.sum()).tolist()
 
 		outcomes_unique = list(pd.unique(table_df["outcome"].astype(str))) if "outcome" in table_df.columns else []
