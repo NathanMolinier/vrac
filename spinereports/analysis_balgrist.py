@@ -905,7 +905,7 @@ def save_top3_metrics_table_figure(
 		)
 		for col in table_df.columns
 	}
-	fig_width = max(14.0, 0.12 * sum(char_lengths.values()) + 2.0)
+	fig_width = max(12.0, 0.10 * sum(char_lengths.values()) + 1.2)
 	fig, ax = plt.subplots(figsize=(fig_width, fig_height))
 	ax.axis("off")
 	ax.set_title(f"Top 3 correlation scores per outcome - {config_name}", fontsize=10, pad=8)
@@ -926,7 +926,12 @@ def save_top3_metrics_table_figure(
 		outcome_idx = col_names.index("outcome") if "outcome" in col_names else None
 		feature_idx = col_names.index("feature") if "feature" in col_names else None
 
-		weights = np.array([max(6, char_lengths.get(col, 6)) for col in col_names], dtype=float)
+		min_chars = 4
+		weights = np.array([max(min_chars, char_lengths.get(col, min_chars)) for col in col_names], dtype=float)
+		if outcome_idx is not None:
+			weights[outcome_idx] = max(3.0, 0.60 * char_lengths.get("outcome", min_chars))
+		if feature_idx is not None:
+			weights[feature_idx] = max(4.0, 0.62 * char_lengths.get("feature", min_chars))
 		col_widths = (weights / weights.sum()).tolist()
 
 		outcomes_unique = list(pd.unique(table_df["outcome"].astype(str))) if "outcome" in table_df.columns else []
@@ -1038,11 +1043,11 @@ def main() -> None:
 					continue
 
 				merged = readout_config.merge(features, on="Lfd_Nr", how="inner")
-				merged.to_csv(outdir / f"merged_subject_level__{_safe_col(config_name)}.csv", index=False)
-				print(
-					f"[{config_name}] Merged subjects: {merged.shape[0]} "
-					f"(readout={readout_config.shape[0]}, features={features.shape[0]})"
-				)
+				# merged.to_csv(outdir / f"merged_subject_level__{_safe_col(config_name)}.csv", index=False)
+				# print(
+				# 	f"[{config_name}] Merged subjects: {merged.shape[0]} "
+				# 	f"(readout={readout_config.shape[0]}, features={features.shape[0]})"
+				# )
 
 				outcomes = select_outcome_columns(readout_config, all_only=False)
 
