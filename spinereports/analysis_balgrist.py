@@ -935,11 +935,50 @@ def save_top3_metrics_table_figure(
 		col_widths = (weights / weights.sum()).tolist()
 
 		outcomes_unique = list(pd.unique(table_df["outcome"].astype(str))) if "outcome" in table_df.columns else []
-		cmap = cm.get_cmap("Set3", max(1, len(outcomes_unique)))
-		outcome_color = {
-			outcome: (*cmap(i)[:3], 0.35)
-			for i, outcome in enumerate(outcomes_unique)
+
+		def _pathology_group(outcome_name: str) -> str:
+			name = outcome_name.lower()
+			if "foraminal" in name:
+				return "foraminal"
+			if "recess" in name:
+				return "recessal"
+			if "spinal" in name or "canal" in name:
+				return "canal"
+			return "other"
+
+		base_colors = {
+			"foraminal": np.array([0.45, 0.70, 0.93]),
+			"recessal": np.array([0.52, 0.78, 0.56]),
+			"canal": np.array([0.98, 0.72, 0.42]),
+			"other": np.array([0.76, 0.70, 0.88]),
 		}
+
+		pathology_to_outcomes: Dict[str, List[str]] = {}
+		for outcome in outcomes_unique:
+			group = _pathology_group(outcome)
+			if group not in pathology_to_outcomes:
+				pathology_to_outcomes[group] = []
+			pathology_to_outcomes[group].append(outcome)
+
+		outcome_color: Dict[str, tuple[float, float, float, float]] = {}
+		for group, outcome_list in pathology_to_outcomes.items():
+			base_rgb = base_colors.get(group, base_colors["other"])
+			n_group = len(outcome_list)
+			for idx, outcome in enumerate(outcome_list):
+				if n_group <= 1:
+					rgb = base_rgb
+				else:
+					pos = idx / (n_group - 1)
+					# Stronger within-group contrast:
+					# - early entries: darker and slightly more saturated
+					# - late entries: lighter and slightly desaturated
+					dark_mix = max(0.0, 0.28 - 0.28 * pos)
+					white_mix = max(0.0, 0.10 + 0.60 * pos)
+					rgb = base_rgb * (1.0 - white_mix - dark_mix)
+					rgb = rgb + np.ones(3) * white_mix
+					rgb = rgb + np.zeros(3) * dark_mix
+					rgb = np.clip(rgb, 0.0, 1.0)
+				outcome_color[outcome] = (float(rgb[0]), float(rgb[1]), float(rgb[2]), 0.42)
 
 		for (row_idx, col_idx), cell in tbl.get_celld().items():
 			cell.set_width(col_widths[col_idx])
@@ -1049,7 +1088,7 @@ def main() -> None:
 				# 	f"(readout={readout_config.shape[0]}, features={features.shape[0]})"
 				# )
 
-				outcomes = select_outcome_columns(readout_config, all_only=False)
+				outcomes = select_outcome_columns(readout_config, all_only=True)
 
 				print(f"[{config_name}] Outcomes: {len(outcomes)}")
 
