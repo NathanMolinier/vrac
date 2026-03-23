@@ -489,6 +489,14 @@ def add_level_specific_features(
 				new_col = f"{prefix}_surface_at_level"
 			elif "asymmetry" in metric:
 				new_col = f"{prefix}_asymmetry_at_level"
+			elif "compression_ratio" in metric:
+				new_col = f"{prefix}_compression_at_level"
+		elif prefix == "canal" and ("right" in metric) or ("left" in metric):
+			if "area" in metric:
+				new_col = f"{prefix}_side_area_at_level"
+		elif prefix == "csf" and ("right" in metric) or ("left" in metric):
+			if "signal" in metric:
+				new_col = f"{prefix}_side_signal_at_level"
 		else:
 			new_col = f"{prefix}_{metric}_at_level"
 		if not new_col in merged.columns:
@@ -498,7 +506,7 @@ def add_level_specific_features(
 				continue
 			col = di[level]
 			if prefix == "foramens":
-				if "surface" in metric:
+				if "surface" in metric or "compression" in metric:
 					side_en = metric.split('_')[0]
 					# Inverse foramens (different convention for left/right) to match clinical ratings
 					if side_en.lower() == "right":
@@ -519,6 +527,28 @@ def add_level_specific_features(
 								merged.loc[mask, new_col] = 1/merged.loc[mask, col]
 							else:
 								merged.loc[mask, new_col] = merged.loc[mask, col]
+			elif prefix == "canal"  and ("right" in metric) or ("left" in metric):
+				side_en = metric.split('_')[0]
+				# Inverse foramens (different convention for left/right) to match clinical ratings
+				if side_en.lower() == "right":
+					side_en = "left"
+				else:
+					side_en = "right"
+				side_ger = side_dict[side_en.lower()]
+				mask = (level_values == str(level)) & (side_values.str.lower() == side_ger)
+				if mask.any():
+					merged.loc[mask, new_col] = merged.loc[mask, col]
+			elif prefix == "csf" and ("right" in metric) or ("left" in metric):
+				side_en = metric.split('_')[0]
+				# Inverse foramens (different convention for left/right) to match clinical ratings
+				if side_en.lower() == "right":
+					side_en = "left"
+				else:
+					side_en = "right"
+				side_ger = side_dict[side_en.lower()]
+				mask = (level_values == str(level)) & (side_values.str.lower() == side_ger)
+				if mask.any():
+					merged.loc[mask, new_col] = merged.loc[mask, col]
 			else:
 				mask = level_values == str(level)
 				if mask.any():
@@ -1060,15 +1090,15 @@ def main() -> None:
 	# Compute statistics by sex
 	sex_mask_dict = {
 		"all_sexes": pd.Series([True] * len(readout)),
-		"male": readout["sex"] == 1, # (1:male)
-		"female": readout["sex"] == 2, # (2:female)
+		# "male": readout["sex"] == 1, # (1:male)
+		# "female": readout["sex"] == 2, # (2:female)
 	}
 
 	# Compute statistics by side
 	side_mask_dict = {
 		"all_sides": pd.Series([True] * len(readout)),
-		"left": readout["Side"] == "links", # or "links"
-		"right": readout["Side"] == "rechts", # or "rechts"
+		# "left": readout["Side"] == "links", # or "links"
+		# "right": readout["Side"] == "rechts", # or "rechts"
 	}
 
 	for level_key, level_mask in level_mask_dict.items():
