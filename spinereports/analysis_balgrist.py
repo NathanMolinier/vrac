@@ -491,10 +491,10 @@ def add_level_specific_features(
 				new_col = f"{prefix}_asymmetry_at_level"
 			elif "compression_ratio" in metric:
 				new_col = f"{prefix}_compression_at_level"
-		elif prefix == "canal" and ("right" in metric) or ("left" in metric):
+		elif prefix == "canal" and (("right" in metric) or ("left" in metric)):
 			if "area" in metric:
 				new_col = f"{prefix}_side_area_at_level"
-		elif prefix == "csf" and ("right" in metric) or ("left" in metric):
+		elif prefix == "csf" and (("right" in metric) or ("left" in metric)):
 			if "signal" in metric:
 				new_col = f"{prefix}_side_signal_at_level"
 		else:
@@ -527,7 +527,7 @@ def add_level_specific_features(
 								merged.loc[mask, new_col] = 1/merged.loc[mask, col]
 							else:
 								merged.loc[mask, new_col] = merged.loc[mask, col]
-			elif prefix == "canal"  and ("right" in metric) or ("left" in metric):
+			elif prefix == "canal"  and (("right" in metric) or ("left" in metric)):
 				side_en = metric.split('_')[0]
 				# Inverse foramens (different convention for left/right) to match clinical ratings
 				if side_en.lower() == "right":
@@ -538,7 +538,7 @@ def add_level_specific_features(
 				mask = (level_values == str(level)) & (side_values.str.lower() == side_ger)
 				if mask.any():
 					merged.loc[mask, new_col] = merged.loc[mask, col]
-			elif prefix == "csf" and ("right" in metric) or ("left" in metric):
+			elif prefix == "csf" and (("right" in metric) or ("left" in metric)):
 				side_en = metric.split('_')[0]
 				# Inverse foramens (different convention for left/right) to match clinical ratings
 				if side_en.lower() == "right":
