@@ -1112,6 +1112,32 @@ def main() -> None:
 				# 	f"(readout={readout_config.shape[0]}, features={features.shape[0]})"
 				# )
 
+					# Extract and print demographics
+				n_subjects = len(merged)
+				
+				if "sex" in merged.columns:
+					n_male = (merged["sex"] == 1).sum()
+					n_female = (merged["sex"] == 2).sum()
+					sex_str = f"{n_male} male, {n_female} female"
+				else:
+					sex_str = "Sex column not found"
+
+				age_col = "age" if "age" in merged.columns else ("Age" if "Age" in merged.columns else None)
+				if age_col:
+					age_min = merged[age_col].min()
+					age_max = merged[age_col].max()
+					age_mean = merged[age_col].mean()
+					age_std = merged[age_col].std()
+					age_str = f"Range: {age_min}-{age_max} (Mean: {age_mean:.1f} ± {age_std:.1f})"
+				else:
+					age_str = "Age column not found"
+
+				print("\n--- Demographics ---")
+				print(f"Number of unique subjects: {n_subjects}")
+				print(f"Sex: {sex_str}")
+				print(f"Age: {age_str}")
+				print("--------------------\n")
+
 				outcomes = select_outcome_columns(readout_config, all_only=True)
 
 				print(f"[{config_name}] Outcomes: {len(outcomes)}")
