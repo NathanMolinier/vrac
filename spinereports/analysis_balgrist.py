@@ -681,6 +681,7 @@ def compute_ordinal_logit(
 					"feature": feature,
 					"n": int(df.shape[0]),
 					"n_classes": int(y_unique.size),
+					"odds_std": x_std,
 					"coef_log_odds_per_sd": coef,
 					"odds_ratio_per_sd": or_val,
 					"se": se,
@@ -835,6 +836,7 @@ def merge_results_tables(
 		"pearson_q",
 		"n_ordinal",
 		"n_classes",
+		"odds_std",
 		"coef_log_odds_per_sd",
 		"odds_ratio_per_sd",
 		"se",
@@ -908,6 +910,7 @@ def save_top3_metrics_table_figure(
 		"spearman_r",
 		"spearman_q",
 		"odds_ratio_per_sd",
+		"odds_std",
 		"ordinal_q",
 		"auc",
 		"auc_q"
