@@ -8,6 +8,7 @@ from pathlib import Path
 
 def generate_plots(df_all, numeric_cols, file_name, plots_dir):
     """Generate Bland-Altman and Scatter plots for numeric columns."""
+    icc_results = {}
     for col in numeric_cols:
         col_t1 = f"{col}_T1w"
         col_t2 = f"{col}_T2w"
@@ -25,6 +26,10 @@ def generate_plots(df_all, numeric_cols, file_name, plots_dir):
         
         if len(v1) == 0:
             continue
+            
+        icc_val = calculate_icc(v1.values, v2.values)
+        if not np.isnan(icc_val):
+            icc_results[col] = icc_val
             
         # Create a structure-specific folder
         struct_dir = plots_dir / file_name.replace('.csv', '')
@@ -65,6 +70,47 @@ def generate_plots(df_all, numeric_cols, file_name, plots_dir):
         plt.savefig(struct_dir / f"bland_altman_{col}.png", dpi=300, bbox_inches='tight')
         plt.close()
 
+    # 3. Bar Plot for ICC Summary across all metrics in this file
+    if icc_results:
+        plt.figure(figsize=(8, max(5, len(icc_results) * 0.4)))
+        sorted_iccs = sorted(icc_results.items(), key=lambda item: item[1])
+        metrics = [item[0] for item in sorted_iccs]
+        values = [item[1] for item in sorted_iccs]
+        
+        sns.barplot(x=values, y=metrics, palette='viridis')
+        plt.axvline(1.0, color='black')
+        plt.axvline(0.9, color='green', linestyle=':', label='Excellent (>0.9)')
+        plt.axvline(0.75, color='orange', linestyle=':', label='Good (>0.75)')
+        plt.xlim(0, 1.05)
+        plt.title(f'Intraclass Correlation Coefficients (ICC)\n{file_name}')
+        plt.xlabel('ICC(1,1)')
+        plt.ylabel('Metric')
+        plt.legend(loc='lower left')
+        plt.tight_layout()
+        plt.savefig(struct_dir / "icc_summary_barplot.png", dpi=300, bbox_inches='tight')
+        plt.close()
+
+def calculate_icc(v1, v2):
+    """Calculate Intraclass Correlation Coefficient (ICC) - one-way random effects."""
+    n = len(v1)
+    if n < 2: 
+        return np.nan
+    k = 2
+    mean_subj = (v1 + v2) / 2
+    grand_mean = np.mean(mean_subj)
+    
+    SSB = k * np.sum((mean_subj - grand_mean)**2)
+    MSB = SSB / (n - 1)
+    
+    SSW = np.sum((v1 - mean_subj)**2 + (v2 - mean_subj)**2)
+    MSW = SSW / n
+    
+    if (MSB + (k - 1) * MSW) == 0:
+        return np.nan
+        
+    icc = (MSB - MSW) / (MSB + (k - 1) * MSW)
+    return icc
+
 def calculate_stability(df, numeric_cols, suffix1='_T1w', suffix2='_T2w'):
     """Calculate Mean Absolute Difference, Mean Relative Difference, and Correlation."""
     stability_results = []
@@ -92,12 +138,14 @@ def calculate_stability(df, numeric_cols, suffix1='_T1w', suffix2='_T2w'):
         rel_diff = abs_diff / (np.abs(v1) + 1e-9) # avoid division by zero
         
         corr = v1.corr(v2) if len(v1) > 1 else np.nan
+        icc_val = calculate_icc(v1.values, v2.values)
         
         stability_results.append({
             'Metric': col,
             'Mean_Absolute_Diff': abs_diff.mean(),
             'Mean_Relative_Diff_Pct': rel_diff.mean() * 100,
             'Pearson_Correlation': corr,
+            'ICC': icc_val,
             'N_Samples': len(v1)
         })
         
@@ -190,7 +238,7 @@ def main():
         final_report_df = pd.concat(final_reports, ignore_index=True)
         
         # Reorder columns for readability
-        cols = ['File', 'Metric', 'N_Samples', 'Pearson_Correlation', 'Mean_Absolute_Diff', 'Mean_Relative_Diff_Pct']
+        cols = ['File', 'Metric', 'N_Samples', 'ICC', 'Pearson_Correlation', 'Mean_Absolute_Diff', 'Mean_Relative_Diff_Pct']
         final_report_df = final_report_df[cols]
         
         out_csv_path = output_dir / "stability_report.csv"
