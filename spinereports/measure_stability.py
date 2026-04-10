@@ -220,7 +220,16 @@ def main():
             
         df_all = pd.concat(file_data, ignore_index=True)
         
-        exclude_cols = ['structure', 'structure_name', 'slice_interp', 'vertebra_level', 'subject']
+        exclude_cols = ['structure', 'structure_name', 'slice_interp', 'vertebra_level', 'subject', 'nucleus_eccentricity_AP-RL', 
+                        'nucleus_eccentricity_AP-SI','nucleus_eccentricity_RL-SI','nucleus_solidity','nucleus_volume',
+                        'nucleus_median_thickness','intensity_variation','median_signal','ap_attenuation','left_compression_ratio',
+                        'right_compression_ratio','slice_signal','left_slice_signal','right_slice_signal']
+        
+        if file_name == 'canal_subject.csv':
+            exclude_cols += ['asymmetry_R_L', 'right_area', 'left_area']
+        elif file_name == 'discs_subject.csv':
+            exclude_cols += ['eccentricity']
+
         numeric_cols = [c.replace('_T1w', '') for c in df_all.columns if c.endswith('_T1w') and not any(ext in c for ext in exclude_cols)]
         
         # Calculate stability
