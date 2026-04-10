@@ -9,6 +9,9 @@ from pathlib import Path
 def generate_plots(df_all, numeric_cols, file_name, plots_dir):
     """Generate Bland-Altman and Scatter plots for numeric columns."""
     icc_results = {}
+    valid_metrics = []
+    plot_data = {}
+    
     for col in numeric_cols:
         col_t1 = f"{col}_T1w"
         col_t2 = f"{col}_T2w"
@@ -31,44 +34,58 @@ def generate_plots(df_all, numeric_cols, file_name, plots_dir):
         if not np.isnan(icc_val):
             icc_results[col] = icc_val
             
-        # Create a structure-specific folder
-        struct_dir = plots_dir / file_name.replace('.csv', '')
-        struct_dir.mkdir(parents=True, exist_ok=True)
+        valid_metrics.append(col)
+        plot_data[col] = (v1, v2)
+            
+    if not valid_metrics:
+        return
+        
+    # Create a structure-specific folder
+    struct_dir = plots_dir / file_name.replace('.csv', '')
+    struct_dir.mkdir(parents=True, exist_ok=True)
+    
+    n_metrics = len(valid_metrics)
+    fig, axes = plt.subplots(n_metrics, 2, figsize=(12, 5 * n_metrics))
+    if n_metrics == 1:
+        axes = np.array([axes])
+        
+    for i, col in enumerate(valid_metrics):
+        v1, v2 = plot_data[col]
         
         # 1. Scatter Plot
-        plt.figure(figsize=(6, 6))
-        sns.scatterplot(x=v1, y=v2, alpha=0.6)
+        ax_scatter = axes[i, 0]
+        sns.scatterplot(x=v1, y=v2, alpha=0.6, ax=ax_scatter)
         min_val = min(v1.min(), v2.min())
         max_val = max(v1.max(), v2.max())
         if not np.isnan(min_val) and not np.isnan(max_val):
-            plt.plot([min_val, max_val], [min_val, max_val], 'r--', label='y=x (Perfect Agreement)')
-        plt.title(f'Scatter Plot - {col}\n({file_name})')
-        plt.xlabel('T1w')
-        plt.ylabel('T2w')
-        plt.legend()
-        plt.tight_layout()
-        plt.savefig(struct_dir / f"scatter_{col}.png", dpi=300, bbox_inches='tight')
-        plt.close()
+            ax_scatter.plot([min_val, max_val], [min_val, max_val], 'r--', label='y=x (Perfect Agreement)')
+            
+        corr = v1.corr(v2) if len(v1) > 1 else np.nan
+        ax_scatter.set_title(f'{col}\nPearson r: {corr:.3f}')
+        ax_scatter.set_xlabel('T1w')
+        ax_scatter.set_ylabel('T2w')
+        ax_scatter.legend()
         
         # 2. Bland-Altman Plot
+        ax_ba = axes[i, 1]
         mean_vals = (v1 + v2) / 2
         diff_vals = v1 - v2
         md = np.mean(diff_vals)
         sd = np.std(diff_vals, axis=0)
         
-        plt.figure(figsize=(6, 6))
-        sns.scatterplot(x=mean_vals, y=diff_vals, alpha=0.6)
-        plt.axhline(md, color='red', linestyle='-', label=f'Mean Bias: {md:.2f}')
-        plt.axhline(md + 1.96*sd, color='blue', linestyle='--', label=f'+1.96 SD: {md + 1.96*sd:.2f}')
-        plt.axhline(md - 1.96*sd, color='blue', linestyle='--', label=f'-1.96 SD: {md - 1.96*sd:.2f}')
-        plt.axhline(0, color='gray', linestyle=':')
-        plt.title(f'Bland-Altman Plot - {col}\n({file_name})')
-        plt.xlabel('Average of T1w and T2w')
-        plt.ylabel('Difference (T1w - T2w)')
-        plt.legend()
-        plt.tight_layout()
-        plt.savefig(struct_dir / f"bland_altman_{col}.png", dpi=300, bbox_inches='tight')
-        plt.close()
+        sns.scatterplot(x=mean_vals, y=diff_vals, alpha=0.6, ax=ax_ba)
+        ax_ba.axhline(md, color='red', linestyle='-', label=f'Mean Bias: {md:.2f}')
+        ax_ba.axhline(md + 1.96*sd, color='blue', linestyle='--', label=f'+1.96 SD: {md + 1.96*sd:.2f}')
+        ax_ba.axhline(md - 1.96*sd, color='blue', linestyle='--', label=f'-1.96 SD: {md - 1.96*sd:.2f}')
+        ax_ba.axhline(0, color='gray', linestyle=':')
+        ax_ba.set_title(f'{col} - Bland-Altman')
+        ax_ba.set_xlabel('Average of T1w and T2w')
+        ax_ba.set_ylabel('Difference (T1w - T2w)')
+        ax_ba.legend()
+
+    plt.tight_layout()
+    plt.savefig(struct_dir / f"combined_scatter_BA_plots.png", dpi=300, bbox_inches='tight')
+    plt.close()
 
     # 3. Bar Plot for ICC Summary across all metrics in this file
     if icc_results:
