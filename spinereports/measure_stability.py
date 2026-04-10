@@ -77,7 +77,7 @@ def generate_plots(df_all, numeric_cols, file_name, plots_dir):
         metrics = [item[0] for item in sorted_iccs]
         values = [item[1] for item in sorted_iccs]
         
-        sns.barplot(x=values, y=metrics, palette='viridis')
+        sns.barplot(x=values, y=metrics, hue=metrics, palette='viridis', legend=False)
         plt.axvline(1.0, color='black')
         plt.axvline(0.9, color='green', linestyle=':', label='Excellent (>0.9)')
         plt.axvline(0.75, color='orange', linestyle=':', label='Good (>0.75)')
@@ -238,7 +238,7 @@ def main():
         final_reports.append(stability_df)
 
         # Generate plots
-        plots_dir = output_dir / "plots"
+        plots_dir = output_dir / "out_stability"
         plots_dir.mkdir(parents=True, exist_ok=True)
         generate_plots(df_all, numeric_cols, file_name, plots_dir)
 
@@ -250,7 +250,7 @@ def main():
         cols = ['File', 'Metric', 'N_Samples', 'ICC', 'Pearson_Correlation', 'Mean_Absolute_Diff', 'Mean_Relative_Diff_Pct']
         final_report_df = final_report_df[cols]
         
-        out_csv_path = output_dir / "stability_report.csv"
+        out_csv_path = plots_dir / "stability_report.csv"
         final_report_df.to_csv(out_csv_path, index=False)
         print(f"Successfully processed pairing! Stability evaluated and saved to {out_csv_path}")
     else:
