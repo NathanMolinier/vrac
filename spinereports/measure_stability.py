@@ -2,7 +2,68 @@ import os
 import argparse
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 from pathlib import Path
+
+def generate_plots(df_all, numeric_cols, file_name, plots_dir):
+    """Generate Bland-Altman and Scatter plots for numeric columns."""
+    for col in numeric_cols:
+        col_t1 = f"{col}_T1w"
+        col_t2 = f"{col}_T2w"
+        
+        if col_t1 not in df_all.columns or col_t2 not in df_all.columns:
+            continue
+            
+        val_t1 = pd.to_numeric(df_all[col_t1], errors='coerce')
+        val_t2 = pd.to_numeric(df_all[col_t2], errors='coerce')
+        
+        # Drop NaNs and -1 values
+        valid_idx = val_t1.notna() & val_t2.notna() & (val_t1 != -1) & (val_t2 != -1)
+        v1 = val_t1[valid_idx]
+        v2 = val_t2[valid_idx]
+        
+        if len(v1) == 0:
+            continue
+            
+        # Create a structure-specific folder
+        struct_dir = plots_dir / file_name.replace('.csv', '')
+        struct_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 1. Scatter Plot
+        plt.figure(figsize=(6, 6))
+        sns.scatterplot(x=v1, y=v2, alpha=0.6)
+        min_val = min(v1.min(), v2.min())
+        max_val = max(v1.max(), v2.max())
+        if not np.isnan(min_val) and not np.isnan(max_val):
+            plt.plot([min_val, max_val], [min_val, max_val], 'r--', label='y=x (Perfect Agreement)')
+        plt.title(f'Scatter Plot - {col}\n({file_name})')
+        plt.xlabel('T1w')
+        plt.ylabel('T2w')
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(struct_dir / f"scatter_{col}.png", dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        # 2. Bland-Altman Plot
+        mean_vals = (v1 + v2) / 2
+        diff_vals = v1 - v2
+        md = np.mean(diff_vals)
+        sd = np.std(diff_vals, axis=0)
+        
+        plt.figure(figsize=(6, 6))
+        sns.scatterplot(x=mean_vals, y=diff_vals, alpha=0.6)
+        plt.axhline(md, color='red', linestyle='-', label=f'Mean Bias: {md:.2f}')
+        plt.axhline(md + 1.96*sd, color='blue', linestyle='--', label=f'+1.96 SD: {md + 1.96*sd:.2f}')
+        plt.axhline(md - 1.96*sd, color='blue', linestyle='--', label=f'-1.96 SD: {md - 1.96*sd:.2f}')
+        plt.axhline(0, color='gray', linestyle=':')
+        plt.title(f'Bland-Altman Plot - {col}\n({file_name})')
+        plt.xlabel('Average of T1w and T2w')
+        plt.ylabel('Difference (T1w - T2w)')
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(struct_dir / f"bland_altman_{col}.png", dpi=300, bbox_inches='tight')
+        plt.close()
 
 def calculate_stability(df, numeric_cols, suffix1='_T1w', suffix2='_T2w'):
     """Calculate Mean Absolute Difference, Mean Relative Difference, and Correlation."""
@@ -118,6 +179,11 @@ def main():
         stability_df = calculate_stability(df_all, numeric_cols)
         stability_df['File'] = file_name
         final_reports.append(stability_df)
+
+        # Generate plots
+        plots_dir = output_dir / "plots"
+        plots_dir.mkdir(parents=True, exist_ok=True)
+        generate_plots(df_all, numeric_cols, file_name, plots_dir)
 
     if final_reports:
         # 3. Export global structural stability report
