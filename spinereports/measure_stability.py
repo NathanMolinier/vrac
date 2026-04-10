@@ -19,8 +19,8 @@ def calculate_stability(df, numeric_cols, suffix1='_T1w', suffix2='_T2w'):
         val_t1 = pd.to_numeric(df[col_t1], errors='coerce')
         val_t2 = pd.to_numeric(df[col_t2], errors='coerce')
         
-        # Drop NaNs for valid pairwise comparison
-        valid_idx = val_t1.notna() & val_t2.notna()
+        # Drop NaNs and -1 values for valid pairwise comparison
+        valid_idx = val_t1.notna() & val_t2.notna() & (val_t1 != -1) & (val_t2 != -1)
         v1 = val_t1[valid_idx]
         v2 = val_t2[valid_idx]
         
@@ -127,8 +127,9 @@ def main():
         cols = ['File', 'Metric', 'N_Samples', 'Pearson_Correlation', 'Mean_Absolute_Diff', 'Mean_Relative_Diff_Pct']
         final_report_df = final_report_df[cols]
         
-        final_report_df.to_csv(output_dir, index=False)
-        print(f"Successfully processed pairing! Stability evaluated and saved to {output_dir}")
+        out_csv_path = output_dir / "stability_report.csv"
+        final_report_df.to_csv(out_csv_path, index=False)
+        print(f"Successfully processed pairing! Stability evaluated and saved to {out_csv_path}")
     else:
         print("No paired files could be successfully aggregated.")
 
