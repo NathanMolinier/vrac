@@ -36,13 +36,14 @@ def generate_plots(df_all, numeric_cols, file_name, plots_dir):
         struct_dir.mkdir(parents=True, exist_ok=True)
         
         # 1. Scatter Plot
+        corr = v1.corr(v2) if len(v1) > 1 else np.nan
         plt.figure(figsize=(6, 6))
         sns.scatterplot(x=v1, y=v2, alpha=0.6)
         min_val = min(v1.min(), v2.min())
         max_val = max(v1.max(), v2.max())
         if not np.isnan(min_val) and not np.isnan(max_val):
             plt.plot([min_val, max_val], [min_val, max_val], 'r--', label='y=x (Perfect Agreement)')
-        plt.title(f'Scatter Plot - {col}\n({file_name})')
+        plt.title(f'Pearson r: {corr:.3f}')
         plt.xlabel('T1w')
         plt.ylabel('T2w')
         plt.legend()
@@ -62,7 +63,6 @@ def generate_plots(df_all, numeric_cols, file_name, plots_dir):
         plt.axhline(md + 1.96*sd, color='blue', linestyle='--', label=f'+1.96 SD: {md + 1.96*sd:.2f}')
         plt.axhline(md - 1.96*sd, color='blue', linestyle='--', label=f'-1.96 SD: {md - 1.96*sd:.2f}')
         plt.axhline(0, color='gray', linestyle=':')
-        plt.title(f'Bland-Altman Plot - {col}\n({file_name})')
         plt.xlabel('Average of T1w and T2w')
         plt.ylabel('Difference (T1w - T2w)')
         plt.legend()
@@ -159,7 +159,7 @@ def main():
 
     input_dir = Path("/home/ge.polymtl.ca/p118739/data/datasets/analysis_balgrist/reports_t1w_t2w") #Path(args.input)
     output_dir = Path("/home/ge.polymtl.ca/p118739/data/datasets/analysis_balgrist/reports_t1w_t2w") #Path(args.output)
-    
+
     # Identify unique subjects by crawling sub-* folders
     all_dirs = [d.name for d in input_dir.iterdir() if d.is_dir() and d.name.startswith('sub-')]
     
@@ -227,8 +227,6 @@ def main():
         
         if file_name == 'canal_subject.csv':
             exclude_cols += ['asymmetry_R_L', 'right_area', 'left_area']
-        elif file_name == 'discs_subject.csv':
-            exclude_cols += ['eccentricity']
 
         numeric_cols = [c.replace('_T1w', '') for c in df_all.columns if c.endswith('_T1w') and not any(ext in c for ext in exclude_cols)]
         
