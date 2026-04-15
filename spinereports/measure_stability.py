@@ -157,6 +157,57 @@ def generate_plots(df_all, numeric_cols, file_name, plots_dir, rename_map=None):
         plt.savefig(struct_dir / "icc_summary_barplot.png", dpi=300, bbox_inches='tight')
         plt.close()
 
+def generate_combined_bland_altman(plot_data, display_names, plots_dir):
+    """Generate a combined Bland-Altman subplot figure for all structures."""
+    if not plot_data:
+        return
+    
+    # Create a combined Bland-Altman subplot figure
+    n_metrics = len(plot_data)
+    n_cols = 4  # 4 columns for the grid
+    n_rows = (n_metrics + n_cols - 1) // n_cols  # Calculate needed rows
+    
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(20, 5.5 * n_rows))
+    if n_rows == 1 and n_cols == 1:
+        axes = np.array([[axes]])
+    elif n_rows == 1 or n_cols == 1:
+        axes = axes.reshape(n_rows, n_cols)
+    
+    axes_flat = axes.flatten()
+    
+    for i, (col, (v1, v2)) in enumerate(plot_data.items()):
+        ax = axes_flat[i]
+        display_name = display_names.get(col, col)
+        
+        # Bland-Altman Plot
+        mean_vals = (v1 + v2) / 2
+        diff_vals = v1 - v2
+        md = np.mean(diff_vals)
+        sd = np.std(diff_vals, axis=0)
+        
+        ax.scatter(mean_vals, diff_vals, alpha=0.6, s=80, color='steelblue', edgecolors='navy', linewidth=0.5)
+        ax.axhline(md, color='red', linestyle='-', linewidth=2.5, label=f'Bias: {md:.2f}')
+        ax.axhline(md + 1.96*sd, color='blue', linestyle='--', linewidth=2, label=f'+1.96 SD: {md + 1.96*sd:.2f}')
+        ax.axhline(md - 1.96*sd, color='blue', linestyle='--', linewidth=2, label=f'-1.96 SD: {md - 1.96*sd:.2f}')
+        ax.axhline(0, color='gray', linestyle=':', linewidth=1.5)
+        
+        # Large fonts for publication quality
+        ax.set_title(f'{display_name}', fontsize=14, fontweight='bold', pad=12)
+        ax.set_xlabel('Mean (T1w + T2w)/2', fontsize=12, fontweight='bold')
+        ax.set_ylabel('Difference (T1w - T2w)', fontsize=12, fontweight='bold')
+        ax.tick_params(axis='both', which='major', labelsize=10)
+        ax.legend(fontsize=9, loc='best', framealpha=0.92, edgecolor='black')
+        ax.grid(True, alpha=0.25)
+    
+    # Hide unused subplots
+    for j in range(i + 1, len(axes_flat)):
+        axes_flat[j].axis('off')
+    
+    plt.suptitle('Bland-Altman Analysis - All Structures', fontsize=18, fontweight='bold', y=0.995)
+    plt.tight_layout()
+    plt.savefig(plots_dir / "bland_altman_all_structures_combined.png", dpi=300, bbox_inches='tight')
+    plt.close()
+
 def calculate_icc(v1, v2):
     """Calculate Intraclass Correlation Coefficient (ICC) - one-way random effects."""
     n = len(v1)
@@ -285,6 +336,10 @@ def main():
 
     # 2. Evaluate stability across the entire aggregated dataset
     final_reports = []
+    combined_plot_data = {}  # Store all plot data for combined figure
+    combined_display_names = {}  # Store display names for combined figure
+    plots_dir = output_dir / "out_stability"
+    plots_dir.mkdir(parents=True, exist_ok=True)
     
     for file_name, file_data in aggregated_data.items():
         if not file_data:
@@ -331,6 +386,12 @@ def main():
                 'median_thickness': 'Vertebra SI thickness (mm)',
                 'volume': 'Vertebra volume (mm³)',
             }
+        elif file_name == 'csf_subject.csv':
+            rename_map = {
+                'area': 'CSF area (mm²)',
+                'AP_diameter': 'CSF AP diameter (mm)',
+                'RL_diameter': 'CSF RL diameter (mm)',
+            }
         
         # Apply rename to both T1w and T2w columns
         rename_dict_suffixed = {}
@@ -341,14 +402,33 @@ def main():
         
         numeric_cols = [c.replace('_T1w', '') for c in df_all.columns if c.endswith('_T1w') and not c.replace('_T1w', '') in exclude_cols]
         
+        # Collect data for combined plot
+        for col in numeric_cols:
+            col_t1 = f"{col}_T1w"
+            col_t2 = f"{col}_T2w"
+            
+            if col_t1 not in df_all.columns or col_t2 not in df_all.columns:
+                continue
+                
+            val_t1 = pd.to_numeric(df_all[col_t1], errors='coerce')
+            val_t2 = pd.to_numeric(df_all[col_t2], errors='coerce')
+            
+            # Drop NaNs and -1 values
+            valid_idx = val_t1.notna() & val_t2.notna() & (val_t1 != -1) & (val_t2 != -1)
+            v1 = val_t1[valid_idx]
+            v2 = val_t2[valid_idx]
+            
+            if len(v1) > 0:
+                # Use the renamed column name as key
+                combined_plot_data[col] = (v1.values, v2.values)
+                combined_display_names[col] = col
+        
         # Calculate stability
         stability_df = calculate_stability(df_all, numeric_cols, rename_map=rename_map)
         stability_df['File'] = file_name
         final_reports.append(stability_df)
 
-        # Generate plots
-        plots_dir = output_dir / "out_stability"
-        plots_dir.mkdir(parents=True, exist_ok=True)
+        # Generate structure-specific plots
         generate_plots(df_all, numeric_cols, file_name, plots_dir, rename_map=rename_map)
 
     if final_reports:
@@ -359,9 +439,14 @@ def main():
         cols = ['File', 'Metric', 'N_Samples', 'ICC', 'Pearson_Correlation', 'Mean_Absolute_Diff', 'Mean_Relative_Diff_Pct']
         final_report_df = final_report_df[cols]
         
+        plots_dir = output_dir / "out_stability"
         out_csv_path = plots_dir / "stability_report.csv"
         final_report_df.to_csv(out_csv_path, index=False)
         print(f"Successfully processed pairing! Stability evaluated and saved to {out_csv_path}")
+        
+        # Generate combined Bland-Altman subplot
+        generate_combined_bland_altman(combined_plot_data, combined_display_names, plots_dir)
+        print(f"Combined Bland-Altman plot saved to {plots_dir / 'bland_altman_all_structures_combined.png'}")
     else:
         print("No paired files could be successfully aggregated.")
 
