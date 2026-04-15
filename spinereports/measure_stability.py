@@ -6,11 +6,12 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 
-def generate_plots(df_all, numeric_cols, file_name, plots_dir):
+def generate_plots(df_all, numeric_cols, file_name, plots_dir, rename_map=None):
     """Generate Bland-Altman and Scatter plots for numeric columns."""
     icc_results = {}
     valid_metrics = []
     plot_data = {}
+    display_names = {}
     
     for col in numeric_cols:
         col_t1 = f"{col}_T1w"
@@ -36,6 +37,9 @@ def generate_plots(df_all, numeric_cols, file_name, plots_dir):
             
         valid_metrics.append(col)
         plot_data[col] = (v1, v2)
+        
+        # Use column name directly (already renamed)
+        display_names[col] = col
             
     if not valid_metrics:
         return
@@ -60,6 +64,7 @@ def generate_plots(df_all, numeric_cols, file_name, plots_dir):
     for i, col in enumerate(valid_metrics):
         v1, v2 = plot_data[col]
         ax = axes_flat[i]
+        display_name = display_names[col]
         
         # Bland-Altman Plot
         mean_vals = (v1 + v2) / 2
@@ -74,7 +79,7 @@ def generate_plots(df_all, numeric_cols, file_name, plots_dir):
         ax.axhline(0, color='gray', linestyle=':', linewidth=2)
         
         # Large fonts for publication quality
-        ax.set_title(f'{col}', fontsize=16, fontweight='bold', pad=15)
+        ax.set_title(f'{display_name}', fontsize=16, fontweight='bold', pad=15)
         ax.set_xlabel('Mean of T1w and T2w', fontsize=14, fontweight='bold')
         ax.set_ylabel('Difference (T1w - T2w)', fontsize=14, fontweight='bold')
         ax.tick_params(axis='both', which='major', labelsize=12)
@@ -93,6 +98,7 @@ def generate_plots(df_all, numeric_cols, file_name, plots_dir):
     # Individual scatter plots for reference
     for col in valid_metrics:
         v1, v2 = plot_data[col]
+        display_name = display_names[col]
         
         # Scatter Plot
         corr = v1.corr(v2) if len(v1) > 1 else np.nan
@@ -102,7 +108,7 @@ def generate_plots(df_all, numeric_cols, file_name, plots_dir):
         max_val = max(v1.max(), v2.max())
         if not np.isnan(min_val) and not np.isnan(max_val):
             plt.plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=2.5, label='y=x (Perfect Agreement)')
-        plt.title(f'{col} - Correlation Plot', fontsize=16, fontweight='bold', pad=15)
+        plt.title(f'{display_name} - Correlation Plot', fontsize=16, fontweight='bold', pad=15)
         plt.xlabel('T1w', fontsize=14, fontweight='bold')
         plt.ylabel('T2w', fontsize=14, fontweight='bold')
         plt.tick_params(axis='both', which='major', labelsize=12)
@@ -119,10 +125,11 @@ def generate_plots(df_all, numeric_cols, file_name, plots_dir):
     if icc_results:
         plt.figure(figsize=(10, max(6, len(icc_results) * 0.5)))
         sorted_iccs = sorted(icc_results.items(), key=lambda item: item[1])
-        metrics = [item[0] for item in sorted_iccs]
+        metrics_base = [item[0] for item in sorted_iccs]
+        metric_labels = [display_names.get(m, m) for m in metrics_base]
         values = [item[1] for item in sorted_iccs]
         
-        bars = plt.barh(metrics, values, color='steelblue', edgecolor='black', linewidth=1.5)
+        bars = plt.barh(metric_labels, values, color='steelblue', edgecolor='black', linewidth=1.5)
         
         # Color code based on ICC quality
         for i, (bar, val) in enumerate(zip(bars, values)):
@@ -171,7 +178,7 @@ def calculate_icc(v1, v2):
     icc = (MSB - MSW) / (MSB + (k - 1) * MSW)
     return icc
 
-def calculate_stability(df, numeric_cols, suffix1='_T1w', suffix2='_T2w'):
+def calculate_stability(df, numeric_cols, suffix1='_T1w', suffix2='_T2w', rename_map=None):
     """Calculate Mean Absolute Difference, Mean Relative Difference, and Correlation."""
     stability_results = []
     
@@ -200,8 +207,13 @@ def calculate_stability(df, numeric_cols, suffix1='_T1w', suffix2='_T2w'):
         corr = v1.corr(v2) if len(v1) > 1 else np.nan
         icc_val = calculate_icc(v1.values, v2.values)
         
+        # Use renamed metric if available in rename_map, otherwise use original
+        metric_name = col
+        if rename_map and col in rename_map:
+            metric_name = rename_map[col]
+        
         stability_results.append({
-            'Metric': col,
+            'Metric': metric_name,
             'Mean_Absolute_Diff': abs_diff.mean(),
             'Mean_Relative_Diff_Pct': rel_diff.mean() * 100,
             'Pearson_Correlation': corr,
@@ -285,20 +297,59 @@ def main():
                         'nucleus_median_thickness','intensity_variation','median_signal','ap_attenuation','left_compression_ratio',
                         'right_compression_ratio','slice_signal','left_slice_signal','right_slice_signal']
         
-        if file_name == 'canal_subject.csv':
+        # Define column rename mappings for each file type
+        rename_map = {}
+        if file_name == 'discs_subject.csv':
+            exclude_cols += ['eccentricity']
+            rename_map = {
+                'eccentricity_AP-RL': 'Eccentricity AP-RL',
+                'eccentricity_AP-SI': 'Eccentricity AP-SI',
+                'eccentricity_RL-SI': 'Eccentricity RL-SI',
+                'median_thickness': 'Disc height (mm)',
+                'DHI': 'Disc height index',
+                'volume': 'Volume (mm³)',
+                'solidity': 'Solidity'
+            }
+        elif file_name == 'foramens_subject.csv':
+            rename_map = {
+                'right_area': 'Right Area (mm²)',
+                'left_area': 'Left Area (mm²)',
+                'asymmetry_R-L': 'Asymmetry RL',
+            }
+        elif file_name == 'canal_subject.csv':
             exclude_cols += ['asymmetry_R_L', 'right_area', 'left_area']
-
-        numeric_cols = [c.replace('_T1w', '') for c in df_all.columns if c.endswith('_T1w') and not any(ext in c for ext in exclude_cols)]
+            rename_map = {
+                'area': 'Area (mm²)',
+                'diameter_AP': 'AP Diameter (mm)',
+                'diameter_RL': 'RL Diameter (mm)',
+                'eccentricity': 'Eccentricity',
+                'solidity': 'Solidity',
+            }
+        elif file_name == 'vertebrae_subject.csv':
+            rename_map = {
+                'AP_thickness': 'AP thickness (mm)',
+                'median_thickness': 'SI thickness (mm)',
+                'volume': 'Volume (mm³)',
+            }
+        
+        # Apply rename to both T1w and T2w columns
+        rename_dict_suffixed = {}
+        for old_name, new_name in rename_map.items():
+            rename_dict_suffixed[f"{old_name}_T1w"] = f"{new_name}_T1w"
+            rename_dict_suffixed[f"{old_name}_T2w"] = f"{new_name}_T2w"
+        df_all.rename(columns=rename_dict_suffixed, inplace=True)
+        
+        numeric_cols = [c.replace('_T1w', '') for c in df_all.columns if c.endswith('_T1w') and not c.replace('_T1w', '') in exclude_cols]
         
         # Calculate stability
-        stability_df = calculate_stability(df_all, numeric_cols)
+        stability_df = calculate_stability(df_all, numeric_cols, rename_map=rename_map)
         stability_df['File'] = file_name
         final_reports.append(stability_df)
 
         # Generate plots
         plots_dir = output_dir / "out_stability"
         plots_dir.mkdir(parents=True, exist_ok=True)
-        generate_plots(df_all, numeric_cols, file_name, plots_dir)
+        generate_plots(df_all, numeric_cols, file_name, plots_dir, rename_map=rename_map)
 
     if final_reports:
         # 3. Export global structural stability report
