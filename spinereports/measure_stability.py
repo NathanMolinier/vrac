@@ -9,6 +9,9 @@ from pathlib import Path
 def generate_plots(df_all, numeric_cols, file_name, plots_dir):
     """Generate Bland-Altman and Scatter plots for numeric columns."""
     icc_results = {}
+    valid_metrics = []
+    plot_data = {}
+    
     for col in numeric_cols:
         col_t1 = f"{col}_T1w"
         col_t2 = f"{col}_T2w"
@@ -31,61 +34,118 @@ def generate_plots(df_all, numeric_cols, file_name, plots_dir):
         if not np.isnan(icc_val):
             icc_results[col] = icc_val
             
-        # Create a structure-specific folder
-        struct_dir = plots_dir / file_name.replace('.csv', '')
-        struct_dir.mkdir(parents=True, exist_ok=True)
+        valid_metrics.append(col)
+        plot_data[col] = (v1, v2)
+            
+    if not valid_metrics:
+        return
         
-        # 1. Scatter Plot
-        corr = v1.corr(v2) if len(v1) > 1 else np.nan
-        plt.figure(figsize=(6, 6))
-        sns.scatterplot(x=v1, y=v2, alpha=0.6)
-        min_val = min(v1.min(), v2.min())
-        max_val = max(v1.max(), v2.max())
-        if not np.isnan(min_val) and not np.isnan(max_val):
-            plt.plot([min_val, max_val], [min_val, max_val], 'r--', label='y=x (Perfect Agreement)')
-        plt.title(f'Pearson r: {corr:.3f}')
-        plt.xlabel('T1w')
-        plt.ylabel('T2w')
-        plt.legend()
-        plt.tight_layout()
-        plt.savefig(struct_dir / f"scatter_{col}.png", dpi=300, bbox_inches='tight')
-        plt.close()
+    # Create a structure-specific folder
+    struct_dir = plots_dir / file_name.replace('.csv', '')
+    struct_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Create a large comprehensive Bland-Altman subplot figure
+    n_metrics = len(valid_metrics)
+    n_cols = 3  # 3 columns for the grid
+    n_rows = (n_metrics + n_cols - 1) // n_cols  # Calculate needed rows
+    
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(18, 6 * n_rows))
+    if n_rows == 1 and n_cols == 1:
+        axes = np.array([[axes]])
+    elif n_rows == 1 or n_cols == 1:
+        axes = axes.reshape(n_rows, n_cols)
+    
+    axes_flat = axes.flatten()
+    
+    for i, col in enumerate(valid_metrics):
+        v1, v2 = plot_data[col]
+        ax = axes_flat[i]
         
-        # 2. Bland-Altman Plot
+        # Bland-Altman Plot
         mean_vals = (v1 + v2) / 2
         diff_vals = v1 - v2
         md = np.mean(diff_vals)
         sd = np.std(diff_vals, axis=0)
         
-        plt.figure(figsize=(6, 6))
-        sns.scatterplot(x=mean_vals, y=diff_vals, alpha=0.6)
-        plt.axhline(md, color='red', linestyle='-', label=f'Mean Bias: {md:.2f}')
-        plt.axhline(md + 1.96*sd, color='blue', linestyle='--', label=f'+1.96 SD: {md + 1.96*sd:.2f}')
-        plt.axhline(md - 1.96*sd, color='blue', linestyle='--', label=f'-1.96 SD: {md - 1.96*sd:.2f}')
-        plt.axhline(0, color='gray', linestyle=':')
-        plt.xlabel('Average of T1w and T2w')
-        plt.ylabel('Difference (T1w - T2w)')
-        plt.legend()
+        sns.scatterplot(x=mean_vals, y=diff_vals, alpha=0.6, s=100, ax=ax)
+        ax.axhline(md, color='red', linestyle='-', linewidth=2.5, label=f'Mean Bias: {md:.2f}')
+        ax.axhline(md + 1.96*sd, color='blue', linestyle='--', linewidth=2.5, label=f'+1.96 SD: {md + 1.96*sd:.2f}')
+        ax.axhline(md - 1.96*sd, color='blue', linestyle='--', linewidth=2.5, label=f'-1.96 SD: {md - 1.96*sd:.2f}')
+        ax.axhline(0, color='gray', linestyle=':', linewidth=2)
+        
+        # Large fonts for publication quality
+        ax.set_title(f'{col}', fontsize=16, fontweight='bold', pad=15)
+        ax.set_xlabel('Mean of T1w and T2w', fontsize=14, fontweight='bold')
+        ax.set_ylabel('Difference (T1w - T2w)', fontsize=14, fontweight='bold')
+        ax.tick_params(axis='both', which='major', labelsize=12)
+        ax.legend(fontsize=11, loc='best', framealpha=0.95, edgecolor='black')
+        ax.grid(True, alpha=0.3)
+    
+    # Hide unused subplots
+    for j in range(i + 1, len(axes_flat)):
+        axes_flat[j].axis('off')
+    
+    plt.suptitle(f'Bland-Altman Analysis - {file_name}', fontsize=18, fontweight='bold', y=0.995)
+    plt.tight_layout()
+    plt.savefig(struct_dir / "bland_altman_comprehensive_subplots.png", dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    # Individual scatter plots for reference
+    for col in valid_metrics:
+        v1, v2 = plot_data[col]
+        
+        # Scatter Plot
+        corr = v1.corr(v2) if len(v1) > 1 else np.nan
+        plt.figure(figsize=(8, 8))
+        sns.scatterplot(x=v1, y=v2, alpha=0.6, s=100)
+        min_val = min(v1.min(), v2.min())
+        max_val = max(v1.max(), v2.max())
+        if not np.isnan(min_val) and not np.isnan(max_val):
+            plt.plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=2.5, label='y=x (Perfect Agreement)')
+        plt.title(f'{col} - Correlation Plot', fontsize=16, fontweight='bold', pad=15)
+        plt.xlabel('T1w', fontsize=14, fontweight='bold')
+        plt.ylabel('T2w', fontsize=14, fontweight='bold')
+        plt.tick_params(axis='both', which='major', labelsize=12)
+        plt.legend(fontsize=12, edgecolor='black', framealpha=0.95)
+        plt.text(0.05, 0.95, f'Pearson r = {corr:.3f}', transform=plt.gca().transAxes, 
+                fontsize=13, fontweight='bold', verticalalignment='top',
+                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+        plt.grid(True, alpha=0.3)
         plt.tight_layout()
-        plt.savefig(struct_dir / f"bland_altman_{col}.png", dpi=300, bbox_inches='tight')
+        plt.savefig(struct_dir / f"scatter_{col}.png", dpi=300, bbox_inches='tight')
         plt.close()
 
     # 3. Bar Plot for ICC Summary across all metrics in this file
     if icc_results:
-        plt.figure(figsize=(8, max(5, len(icc_results) * 0.4)))
+        plt.figure(figsize=(10, max(6, len(icc_results) * 0.5)))
         sorted_iccs = sorted(icc_results.items(), key=lambda item: item[1])
         metrics = [item[0] for item in sorted_iccs]
         values = [item[1] for item in sorted_iccs]
         
-        sns.barplot(x=values, y=metrics, hue=metrics, palette='viridis', legend=False)
-        plt.axvline(1.0, color='black')
-        plt.axvline(0.9, color='green', linestyle=':', label='Excellent (>0.9)')
-        plt.axvline(0.75, color='orange', linestyle=':', label='Good (>0.75)')
+        bars = plt.barh(metrics, values, color='steelblue', edgecolor='black', linewidth=1.5)
+        
+        # Color code based on ICC quality
+        for i, (bar, val) in enumerate(zip(bars, values)):
+            if val >= 0.9:
+                bar.set_color('darkgreen')
+            elif val >= 0.75:
+                bar.set_color('limegreen')
+            elif val >= 0.5:
+                bar.set_color('orange')
+            else:
+                bar.set_color('crimson')
+        
+        plt.axvline(1.0, color='black', linewidth=2, alpha=0.5)
+        plt.axvline(0.9, color='darkgreen', linestyle='--', linewidth=2.5, label='Excellent (>0.9)')
+        plt.axvline(0.75, color='limegreen', linestyle='--', linewidth=2.5, label='Good (>0.75)')
         plt.xlim(0, 1.05)
-        plt.title(f'Intraclass Correlation Coefficients (ICC)\n{file_name}')
-        plt.xlabel('ICC(1,1)')
-        plt.ylabel('Metric')
-        plt.legend(loc='lower left')
+        
+        plt.title('Intraclass Correlation Coefficients (ICC)', fontsize=16, fontweight='bold', pad=15)
+        plt.xlabel('ICC(1,1)', fontsize=14, fontweight='bold')
+        plt.ylabel('Metric', fontsize=14, fontweight='bold')
+        plt.tick_params(axis='both', which='major', labelsize=12)
+        plt.legend(fontsize=12, loc='lower right', edgecolor='black', framealpha=0.95)
+        plt.grid(True, alpha=0.3, axis='x')
         plt.tight_layout()
         plt.savefig(struct_dir / "icc_summary_barplot.png", dpi=300, bbox_inches='tight')
         plt.close()
