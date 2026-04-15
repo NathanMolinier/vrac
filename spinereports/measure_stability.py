@@ -302,34 +302,34 @@ def main():
         if file_name == 'discs_subject.csv':
             exclude_cols += ['eccentricity']
             rename_map = {
-                'eccentricity_AP-RL': 'Eccentricity AP-RL',
-                'eccentricity_AP-SI': 'Eccentricity AP-SI',
-                'eccentricity_RL-SI': 'Eccentricity RL-SI',
+                'eccentricity_AP-RL': 'Disc eccentricity AP-RL',
+                'eccentricity_AP-SI': 'Disc eccentricity AP-SI',
+                'eccentricity_RL-SI': 'Disc eccentricity RL-SI',
                 'median_thickness': 'Disc height (mm)',
                 'DHI': 'Disc height index',
-                'volume': 'Volume (mm³)',
-                'solidity': 'Solidity'
+                'volume': 'Disc volume (mm³)',
+                'solidity': 'Disc solidity'
             }
         elif file_name == 'foramens_subject.csv':
             rename_map = {
-                'right_area': 'Right Area (mm²)',
-                'left_area': 'Left Area (mm²)',
-                'asymmetry_R-L': 'Asymmetry RL',
+                'right_area': 'Foramen right area (mm²)',
+                'left_area': 'Foramen left area (mm²)',
+                'asymmetry_R-L': 'Foramen asymmetry RL',
             }
         elif file_name == 'canal_subject.csv':
             exclude_cols += ['asymmetry_R_L', 'right_area', 'left_area']
             rename_map = {
-                'area': 'Area (mm²)',
-                'diameter_AP': 'AP Diameter (mm)',
-                'diameter_RL': 'RL Diameter (mm)',
-                'eccentricity': 'Eccentricity',
-                'solidity': 'Solidity',
+                'area': 'Canal area (mm²)',
+                'diameter_AP': 'Canal AP diameter (mm)',
+                'diameter_RL': 'Canal RL diameter (mm)',
+                'eccentricity': 'Canal eccentricity',
+                'solidity': 'Canal solidity',
             }
         elif file_name == 'vertebrae_subject.csv':
             rename_map = {
-                'AP_thickness': 'AP thickness (mm)',
-                'median_thickness': 'SI thickness (mm)',
-                'volume': 'Volume (mm³)',
+                'AP_thickness': 'Vertebra AP thickness (mm)',
+                'median_thickness': 'Vertebra SI thickness (mm)',
+                'volume': 'Vertebra volume (mm³)',
             }
         
         # Apply rename to both T1w and T2w columns
