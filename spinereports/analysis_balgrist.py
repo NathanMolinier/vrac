@@ -574,17 +574,37 @@ def compute_correlations(
 			x = x_full[mask].astype(float).to_numpy()
 			y = y_full[mask].astype(float).to_numpy()
 
-			# Pearson
+			# Pearson with 95% CI
+			pearson_r, pearson_p = np.nan, np.nan
+			pearson_ci_lower, pearson_ci_upper = np.nan, np.nan
 			try:
 				pearson_r, pearson_p = stats.pearsonr(x, y)
+				# Fisher z-transformation for CI
+				z = 0.5 * np.log((1 + pearson_r) / (1 - pearson_r))
+				se_z = 1.0 / np.sqrt(n - 3)
+				z_crit = 1.96
+				z_lower = z - z_crit * se_z
+				z_upper = z + z_crit * se_z
+				pearson_ci_lower = (np.exp(2 * z_lower) - 1) / (np.exp(2 * z_lower) + 1)
+				pearson_ci_upper = (np.exp(2 * z_upper) - 1) / (np.exp(2 * z_upper) + 1)
 			except Exception:
-				pearson_r, pearson_p = np.nan, np.nan
+				pass
 
-			# Spearman
+			# Spearman with 95% CI
+			spearman_r, spearman_p = np.nan, np.nan
+			spearman_ci_lower, spearman_ci_upper = np.nan, np.nan
 			try:
 				spearman_r, spearman_p = stats.spearmanr(x, y)
+				# Fisher z-transformation for CI
+				z = 0.5 * np.log((1 + spearman_r) / (1 - spearman_r))
+				se_z = 1.0 / np.sqrt(n - 3)
+				z_crit = 1.96
+				z_lower = z - z_crit * se_z
+				z_upper = z + z_crit * se_z
+				spearman_ci_lower = (np.exp(2 * z_lower) - 1) / (np.exp(2 * z_lower) + 1)
+				spearman_ci_upper = (np.exp(2 * z_upper) - 1) / (np.exp(2 * z_upper) + 1)
 			except Exception:
-				spearman_r, spearman_p = np.nan, np.nan
+				pass
 
 			results.append(
 				{
@@ -592,8 +612,12 @@ def compute_correlations(
 					"feature": feature,
 					"n": n,
 					"pearson_r": float(pearson_r),
+					"pearson_ci_lower": float(pearson_ci_lower),
+					"pearson_ci_upper": float(pearson_ci_upper),
 					"pearson_p": float(pearson_p),
 					"spearman_r": float(spearman_r),
+					"spearman_ci_lower": float(spearman_ci_lower),
+					"spearman_ci_upper": float(spearman_ci_upper),
 					"spearman_p": float(spearman_p),
 				}
 			)
@@ -626,8 +650,7 @@ def compute_ordinal_logit(
 		ordinal_module = importlib.import_module("statsmodels.miscmodels.ordinal_model")
 		OrderedModel = getattr(ordinal_module, "OrderedModel")
 	except Exception:
-		print("Warning: statsmodels is not available; skipping ordinal logistic regression")
-		return pd.DataFrame()
+		raise ImportError("statsmodels is required for ordinal logistic regression. Please install it via `pip install statsmodels`.")
 
 	if not feature_cols:
 		return pd.DataFrame()
@@ -674,6 +697,15 @@ def compute_ordinal_logit(
 			z_val = float(fit.tvalues.get("x_z", np.nan))
 			p_val = float(fit.pvalues.get("x_z", np.nan))
 			or_val = float(np.exp(coef)) if np.isfinite(coef) else np.nan
+			
+			# 95% CI for odds ratio
+			or_ci_lower = np.nan
+			or_ci_upper = np.nan
+			if np.isfinite(coef) and np.isfinite(se):
+				coef_ci_lower = coef - 1.96 * se
+				coef_ci_upper = coef + 1.96 * se
+				or_ci_lower = float(np.exp(coef_ci_lower))
+				or_ci_upper = float(np.exp(coef_ci_upper))
 
 			results.append(
 				{
@@ -684,6 +716,8 @@ def compute_ordinal_logit(
 					"odds_std": x_std,
 					"coef_log_odds_per_sd": coef,
 					"odds_ratio_per_sd": or_val,
+					"or_ci_lower": or_ci_lower,
+					"or_ci_upper": or_ci_upper,
 					"se": se,
 					"z": z_val,
 					"p": p_val,
@@ -742,6 +776,8 @@ def compute_auc_regrouped_binary(
 			if n < min_n or n_list[0] < 2 or n_list[1] < 2:
 				continue
 
+			auc_ci_lower = np.nan
+			auc_ci_upper = np.nan
 			try:
 				u_stat, p_val = stats.mannwhitneyu(
 					df.loc[df["y_bin"] == 1, "x"].to_numpy(),
@@ -761,6 +797,12 @@ def compute_auc_regrouped_binary(
 				else:
 					n_pos = n_list[1]
 					n_neg = n_list[0]
+				
+				# Calculate 95% CI for AUC using normal approximation
+				if np.isfinite(auc) and auc > 0 and auc < 1:
+					se_auc = np.sqrt(auc * (1 - auc) / (n_pos * n_neg))
+					auc_ci_lower = np.clip(auc - 1.96 * se_auc, 0, 1)
+					auc_ci_upper = np.clip(auc + 1.96 * se_auc, 0, 1)
 			except Exception:
 				auc = np.nan
 				p_val = np.nan
@@ -773,6 +815,8 @@ def compute_auc_regrouped_binary(
 					"n_low": n_neg,
 					"n_high": n_pos,
 					"auc": auc,
+					"auc_ci_lower": auc_ci_lower,
+					"auc_ci_upper": auc_ci_upper,
 					"p": float(p_val) if pd.notna(p_val) else np.nan,
 				}
 			)
@@ -829,9 +873,13 @@ def merge_results_tables(
 		"feature",
 		"n_corr",
 		"spearman_r",
+		"spearman_ci_lower",
+		"spearman_ci_upper",
 		"spearman_p",
 		"spearman_q",
 		"pearson_r",
+		"pearson_ci_lower",
+		"pearson_ci_upper",
 		"pearson_p",
 		"pearson_q",
 		"n_ordinal",
@@ -839,6 +887,8 @@ def merge_results_tables(
 		"odds_std",
 		"coef_log_odds_per_sd",
 		"odds_ratio_per_sd",
+		"or_ci_lower",
+		"or_ci_upper",
 		"se",
 		"z",
 		"ordinal_p",
@@ -850,6 +900,8 @@ def merge_results_tables(
 		"n_low",
 		"n_high",
 		"auc",
+		"auc_ci_lower",
+		"auc_ci_upper",
 		"auc_p",
 		"auc_q",
 		"abs_auc_from_chance",
@@ -895,6 +947,9 @@ def save_top3_metrics_table_figure(
 			return ""
 		try:
 			v = float(val)
+			# Use scientific notation for very small p-values
+			if abs(v) < 0.001 and abs(v) != 0:
+				return f"{v:.2e}"
 			if abs(v) >= 1000:
 				return f"{v:.0f}"
 			if abs(v) >= 1:
@@ -902,17 +957,35 @@ def save_top3_metrics_table_figure(
 			return f"{v:.3g}"
 		except Exception:
 			return str(val)
+	
+	def _fmt_ci(row: Dict[str, object], r_col: str, lower_col: str, upper_col: str) -> str:
+		"""Format value with 95% CI."""
+		r = row.get(r_col)
+		lower = row.get(lower_col)
+		upper = row.get(upper_col)
+		if pd.isna(r) or pd.isna(lower) or pd.isna(upper):
+			return ""
+		try:
+			return f"{float(r):.3f} [{float(lower):.3f}, {float(upper):.3f}]"
+		except Exception:
+			return ""
 
 	table_cols = [
 		"outcome",
 		"feature",
 		"n_corr",
 		"spearman_r",
+		"spearman_ci_lower",
+		"spearman_ci_upper",
 		"spearman_q",
 		"odds_ratio_per_sd",
+		"or_ci_lower",
+		"or_ci_upper",
 		"odds_std",
 		"ordinal_q",
 		"auc",
+		"auc_ci_lower",
+		"auc_ci_upper",
 		"auc_q"
 	]
 	available = [c for c in table_cols if c in top.columns]
@@ -920,8 +993,36 @@ def save_top3_metrics_table_figure(
 		return
 
 	table_df = top[available].copy()
+	
+	# Add formatted CI columns where applicable
+	if "spearman_r" in table_df.columns and "spearman_ci_lower" in table_df.columns:
+		table_df["Spearman r (95% CI)"] = table_df.apply(
+			lambda row: _fmt_ci(row, "spearman_r", "spearman_ci_lower", "spearman_ci_upper"),
+			axis=1
+		)
+	
+	if "odds_ratio_per_sd" in table_df.columns and "or_ci_lower" in table_df.columns:
+		table_df["OR (95% CI)"] = table_df.apply(
+			lambda row: _fmt_ci(row, "odds_ratio_per_sd", "or_ci_lower", "or_ci_upper"),
+			axis=1
+		)
+	
+	if "auc" in table_df.columns and "auc_ci_lower" in table_df.columns:
+		table_df["AUC (95% CI)"] = table_df.apply(
+			lambda row: _fmt_ci(row, "auc", "auc_ci_lower", "auc_ci_upper"),
+			axis=1
+		)
+	
+	# Remove raw value columns and keep formatted ones + all p/q values
+	cols_to_drop = {"spearman_r", "spearman_ci_lower", "spearman_ci_upper",
+	                 "odds_ratio_per_sd", "or_ci_lower", "or_ci_upper",
+	                 "auc", "auc_ci_lower", "auc_ci_upper", "se", "z", "coef_log_odds_per_sd",
+	                 "n_ordinal", "n_classes", "aic", "bic", "llf", "n_auc", "n_low", "n_high", "abs_auc_from_chance"}
+	cols_to_keep = [c for c in table_df.columns if c not in cols_to_drop]
+	table_df = table_df[cols_to_keep]
+	
 	for c in table_df.columns:
-		if c not in {"outcome", "feature"}:
+		if c not in {"outcome", "feature"} and not any(ci_str in c for ci_str in ["(95% CI)", "Spearman", "OR ", "AUC "]):
 			table_df[c] = table_df[c].map(_fmt)
 
 	fig_height = 1.4 + 0.35 * len(table_df)
