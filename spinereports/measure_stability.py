@@ -164,7 +164,7 @@ def generate_combined_bland_altman(plot_data, display_names, plots_dir):
     
     # Create a combined Bland-Altman subplot figure
     n_metrics = len(plot_data)
-    n_cols = 4  # 4 columns for the grid
+    n_cols = 3  # 3 columns for the grid
     n_rows = (n_metrics + n_cols - 1) // n_cols  # Calculate needed rows
     
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(20, 5.5 * n_rows))
@@ -203,9 +203,8 @@ def generate_combined_bland_altman(plot_data, display_names, plots_dir):
     for j in range(i + 1, len(axes_flat)):
         axes_flat[j].axis('off')
     
-    plt.suptitle('Bland-Altman Analysis - All Structures', fontsize=18, fontweight='bold', y=0.995)
     plt.tight_layout()
-    plt.savefig(plots_dir / "bland_altman_all_structures_combined.png", dpi=300, bbox_inches='tight')
+    plt.savefig(plots_dir / "bland_altman_all_structures_combined.png", dpi=500, bbox_inches='tight')
     plt.close()
 
 def calculate_icc(v1, v2):
