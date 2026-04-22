@@ -4,8 +4,8 @@ import numpy as np
 
 def main():
     # Load variables
-    with_sc_folder = "/home/ge.polymtl.ca/p118739/data/datasets/article-totalspineseg/totalsegXtotalspinesegXspineps/spineps/pred-spider-canal"
-    spineps_folder = "/home/ge.polymtl.ca/p118739/data/datasets/article-totalspineseg/totalsegXtotalspinesegXspineps/spineps/pred-spider-canal-merged"
+    with_sc_folder = "/home/ge.polymtl.ca/p118739/data/datasets/article-totalspineseg/totalsegXtotalspinesegXspineps/spineps/canal/pred"
+    spineps_folder = "/home/ge.polymtl.ca/p118739/data/datasets/article-totalspineseg/totalsegXtotalspinesegXspineps/spineps/canal/pred-merged"
 
     for file in os.listdir(with_sc_folder):
         with_sc_path = os.path.join(with_sc_folder, file)
