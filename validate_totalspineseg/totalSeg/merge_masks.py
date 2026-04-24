@@ -45,18 +45,33 @@ def main():
     # Load variables
     folder = os.path.abspath(args.folder)
     out_path = os.path.abspath(args.out_path)
-    shape = None
-
+    
+    # Pre-filter vertebrae files and sort for consistent processing
+    vertebrae_files = []
     for file in os.listdir(folder):
         if file.startswith('vertebrae'):
             vert = file.split('_')[-1].replace('.nii.gz', '')
-            if vert in vert_dict.keys():
-                in_path = os.path.join(folder, file)
-                img = Image(in_path)
-                if shape is None:
-                    shape = img.data.shape
-                    out_img = zeros_like(img)
-                out_img.data[np.where(img.data == 1)] = vert_dict[vert]
+            if vert in vert_dict:
+                vertebrae_files.append((file, vert, vert_dict[vert]))
+    
+    if not vertebrae_files:
+        print("No vertebrae files found")
+        return
+    
+    # Load first image to initialize output array
+    first_path = os.path.join(folder, vertebrae_files[0][0])
+    first_img = Image(first_path)
+    out_img = zeros_like(first_img)
+    
+    # Process first file
+    out_img.data[first_img.data == 1] = vertebrae_files[0][2]
+    
+    # Process remaining files
+    for file, vert, vert_id in vertebrae_files[1:]:
+        in_path = os.path.join(folder, file)
+        img = Image(in_path)
+        # Direct boolean indexing is faster than np.where()
+        out_img.data[img.data == 1] = vert_id
     
     out_img.save(out_path)
 
