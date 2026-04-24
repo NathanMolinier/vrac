@@ -39,23 +39,24 @@ def main():
         "L3":43,
         "L4":44,
         "L5":45,
-        "sacrum":50
+        "S1":50
     }
 
     # Load variables
-    folder = os.path.abspath(args.folder)
-    out_path = os.path.abspath(args.out_path)
+    folder = "/home/ge.polymtl.ca/p118739/data/datasets/article-totalspineseg/ct-seg-comparison/pred_totalseg" #os.path.abspath(args.folder)
+    out_path = "/home/ge.polymtl.ca/p118739/data/datasets/article-totalspineseg/ct-seg-comparison/pred_totalseg/total_seg.nii.gz" #os.path.abspath(args.out_path)
     shape = None
 
     for file in os.listdir(folder):
-        vert = file.split('_')[-1].replace('.nii.gz', '')
-        if vert in vert_dict.keys():
-            in_path = os.path.join(folder, file)
-            img = Image(in_path)
-            if shape is None:
-                shape = img.data.shape
-                out_img = zeros_like(img)
-            out_img.data[np.where(img.data == 1)] = vert_dict[vert]
+        if file.startswith('vertebrae'):
+            vert = file.split('_')[-1].replace('.nii.gz', '')
+            if vert in vert_dict.keys():
+                in_path = os.path.join(folder, file)
+                img = Image(in_path)
+                if shape is None:
+                    shape = img.data.shape
+                    out_img = zeros_like(img)
+                out_img.data[np.where(img.data == 1)] = vert_dict[vert]
     
     out_img.save(out_path)
 
