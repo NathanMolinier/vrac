@@ -43,8 +43,8 @@ def main():
     }
 
     # Load variables
-    folder = "/home/ge.polymtl.ca/p118739/data/datasets/article-totalspineseg/ct-seg-comparison/pred_totalseg" #os.path.abspath(args.folder)
-    out_path = "/home/ge.polymtl.ca/p118739/data/datasets/article-totalspineseg/ct-seg-comparison/pred_totalseg/total_seg.nii.gz" #os.path.abspath(args.out_path)
+    folder = os.path.abspath(args.folder)
+    out_path = os.path.abspath(args.out_path)
     shape = None
 
     for file in os.listdir(folder):
