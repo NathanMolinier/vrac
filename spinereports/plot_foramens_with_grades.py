@@ -312,7 +312,7 @@ def load_image(image_path, target_size):
 def create_grade_table(data_by_grade, max_examples=20, target_size=None):
     """
     Create a figure with subplots showing images organized by grade.
-    Two columns per grade.
+    Two columns per grade with visual separation.
     
     Parameters
     ----------
@@ -386,13 +386,18 @@ def create_grade_table(data_by_grade, max_examples=20, target_size=None):
         # Two columns per grade
         col_start = grade_idx * 2
         
-        # Add grade label as column header (spanning both columns)
-        axes[0, col_start].text(
-            0.5, 1.10, f'Grade {grade}',
-            ha='center', va='bottom',
-            fontsize=14, fontweight='bold',
-            transform=axes[0, col_start].transAxes
-        )
+        # Add grade label above the images using axis coordinates
+        # Place on first row, centered between the two columns
+        if n_rows > 0:
+            ax_for_title = axes[0, col_start] if n_rows > 0 else None
+            if ax_for_title is not None:
+                ax_for_title.text(
+                    1.1, 1.20,
+                    f'Grade {grade}',
+                    ha='center', va='bottom',
+                    fontsize=14, fontweight='bold',
+                    transform=ax_for_title.transAxes
+                )
         
         # Distribute images across 2 columns
         grade_images = images_by_grade[grade]
@@ -452,13 +457,6 @@ def create_grade_table(data_by_grade, max_examples=20, target_size=None):
                     fontsize=9, style='italic', fontweight='bold',
                     transform=ax.transAxes
                 )
-    
-    # Add title
-    fig.suptitle(
-        'Foraminal Stenosis: Examples by Grade',
-        fontsize=16, fontweight='bold', y=0.98
-    )
-    
     return fig
 
 
