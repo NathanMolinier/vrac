@@ -405,14 +405,14 @@ def create_grade_table(data_by_grade, max_examples=20, target_size=None):
                 
                 if img_array is not None:
                     # Display image with proper normalization
-                    ax.imshow(img_array, cmap='gray', vmin=0, vmax=255, aspect='auto')
+                    ax.imshow(img_array, cmap='gray', vmin=0, vmax=150, aspect='auto')
                     
                     # Add level and side label below the image
                     disc_name = map_level_to_disc(level)
-                    side_label = 'L' if side == 'left' else 'R'
+                    side_label = 'left' if side == 'left' else 'right'
                     ax.text(
                         0.5, -0.08,
-                        f'{disc_name}-{side_label}',
+                        f'{disc_name} {side_label}',
                         ha='center', va='top',
                         fontsize=9, style='italic', fontweight='bold',
                         transform=ax.transAxes
