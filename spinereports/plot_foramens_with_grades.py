@@ -46,8 +46,8 @@ def get_parser():
     parser.add_argument(
         '--max-examples-per-cell',
         type=int,
-        default=20,
-        help='Maximum number of images to display per grade/level cell (default: 20)'
+        default=10,
+        help='Maximum number of images to display per grade/level cell (default: 10)'
     )
     return parser
 
@@ -312,13 +312,14 @@ def load_image(image_path, target_size):
 def create_grade_table(data_by_grade, max_examples=20, target_size=None):
     """
     Create a figure with subplots showing images organized by grade.
+    Two columns per grade.
     
     Parameters
     ----------
     data_by_grade : dict
         Data organized by grade, level, side
     max_examples : int
-        Maximum images per grade
+        Maximum images per grade (split between 2 columns)
     target_size : tuple, optional
         Target size (height, width) for images. If None, computed from data.
     
@@ -353,8 +354,9 @@ def create_grade_table(data_by_grade, max_examples=20, target_size=None):
         random.shuffle(grade_images)
         images_by_grade[grade] = grade_images[:max_examples]
     
-    n_rows = max(len(images_by_grade[g]) for g in grades)
-    n_cols = len(grades)
+    # Two columns per grade
+    n_rows = max(len(images_by_grade[g]) // 2 + len(images_by_grade[g]) % 2 for g in grades)
+    n_cols = len(grades) * 2
     
     # Calculate figure size based on image dimensions
     img_height_inches = target_size[0] / 100  # convert pixels to inches
@@ -380,43 +382,76 @@ def create_grade_table(data_by_grade, max_examples=20, target_size=None):
         axes = axes.reshape(-1, 1)
     
     # Fill in the subplots
-    for col_idx, grade in enumerate(grades):
-        # Add grade label as column header
-        axes[0, col_idx].text(
+    for grade_idx, grade in enumerate(grades):
+        # Two columns per grade
+        col_start = grade_idx * 2
+        
+        # Add grade label as column header (spanning both columns)
+        axes[0, col_start].text(
             0.5, 1.10, f'Grade {grade}',
             ha='center', va='bottom',
             fontsize=14, fontweight='bold',
-            transform=axes[0, col_idx].transAxes
+            transform=axes[0, col_start].transAxes
         )
         
-        for row_idx in range(n_rows):
-            ax = axes[row_idx, col_idx]
+        # Distribute images across 2 columns
+        grade_images = images_by_grade[grade]
+        images_col1 = grade_images[:len(grade_images) // 2 + len(grade_images) % 2]
+        images_col2 = grade_images[len(grade_images) // 2 + len(grade_images) % 2:]
+        
+        # Fill column 1
+        for row_idx, img_data in enumerate(images_col1):
+            ax = axes[row_idx, col_start]
             ax.axis('off')
             
-            # Check if we have an image for this cell
-            if row_idx < len(images_by_grade[grade]):
-                img_data = images_by_grade[grade][row_idx]
-                img_path = img_data['path']
-                level = img_data['level']
-                side = img_data['side']
+            img_path = img_data['path']
+            level = img_data['level']
+            side = img_data['side']
+            
+            # Load image
+            img_array = load_image(img_path, target_size)
+            
+            if img_array is not None:
+                # Display image with proper normalization
+                ax.imshow(img_array, cmap='gray', vmin=0, vmax=150, aspect='auto')
                 
-                # Load image
-                img_array = load_image(img_path, target_size)
+                # Add level and side label below the image
+                disc_name = map_level_to_disc(level)
+                side_label = 'left' if side == 'left' else 'right'
+                ax.text(
+                    0.5, -0.08,
+                    f'{disc_name} {side_label}',
+                    ha='center', va='top',
+                    fontsize=9, style='italic', fontweight='bold',
+                    transform=ax.transAxes
+                )
+        
+        # Fill column 2
+        for row_idx, img_data in enumerate(images_col2):
+            ax = axes[row_idx, col_start + 1]
+            ax.axis('off')
+            
+            img_path = img_data['path']
+            level = img_data['level']
+            side = img_data['side']
+            
+            # Load image
+            img_array = load_image(img_path, target_size)
+            
+            if img_array is not None:
+                # Display image with proper normalization
+                ax.imshow(img_array, cmap='gray', vmin=0, vmax=150, aspect='auto')
                 
-                if img_array is not None:
-                    # Display image with proper normalization
-                    ax.imshow(img_array, cmap='gray', vmin=0, vmax=150, aspect='auto')
-                    
-                    # Add level and side label below the image
-                    disc_name = map_level_to_disc(level)
-                    side_label = 'left' if side == 'left' else 'right'
-                    ax.text(
-                        0.5, -0.08,
-                        f'{disc_name} {side_label}',
-                        ha='center', va='top',
-                        fontsize=9, style='italic', fontweight='bold',
-                        transform=ax.transAxes
-                    )
+                # Add level and side label below the image
+                disc_name = map_level_to_disc(level)
+                side_label = 'left' if side == 'left' else 'right'
+                ax.text(
+                    0.5, -0.08,
+                    f'{disc_name} {side_label}',
+                    ha='center', va='top',
+                    fontsize=9, style='italic', fontweight='bold',
+                    transform=ax.transAxes
+                )
     
     # Add title
     fig.suptitle(
