@@ -208,9 +208,43 @@ def read_and_organize_data(csv_path, metrics_folder):
     return data_by_grade
 
 
-def load_image(image_path, target_size=(180, 180)):
+def get_max_image_size(data_by_grade):
     """
-    Load an image, convert to grayscale, and pad to target size.
+    Scan all images and find the maximum dimensions.
+    
+    Parameters
+    ----------
+    data_by_grade : dict
+        Data organized by grade, level, side
+    
+    Returns
+    -------
+    tuple
+        Maximum (height, width) found among all images
+    """
+    max_h = 0
+    max_w = 0
+    
+    for grade_dict in data_by_grade.values():
+        for level_dict in grade_dict.values():
+            for side_list in level_dict.values():
+                for img_path in side_list:
+                    try:
+                        img = PILImage.open(img_path)
+                        img = img.convert('L')
+                        w, h = img.size
+                        max_h = max(max_h, h)
+                        max_w = max(max_w, w)
+                    except Exception as e:
+                        continue
+    
+    # Add some padding for display
+    return (max_h + 20, max_w + 20)
+
+
+def load_image(image_path, target_size):
+    """
+    Load an image, convert to grayscale, and pad to target size with black background.
     
     Parameters
     ----------
@@ -237,8 +271,8 @@ def load_image(image_path, target_size=(180, 180)):
         img_array = np.array(img)
         h, w = img_array.shape
         
-        # Pad to target size with gray background (128)
-        padded = np.ones(target_size, dtype=np.uint8) * 128
+        # Pad to target size with black background (0)
+        padded = np.zeros(target_size, dtype=np.uint8)
         
         # Calculate padding to center the image
         y_offset = (target_size[0] - h) // 2
@@ -252,53 +286,63 @@ def load_image(image_path, target_size=(180, 180)):
         return None
 
 
-def create_grade_table(data_by_grade, max_examples=20):
+def create_grade_table(data_by_grade, max_examples=20, target_size=None):
     """
-    Create a figure with subplots showing images organized by grade and level/side.
+    Create a figure with subplots showing images organized by grade.
     
     Parameters
     ----------
     data_by_grade : dict
         Data organized by grade, level, side
     max_examples : int
-        Maximum images per cell
+        Maximum images per grade
+    target_size : tuple, optional
+        Target size (height, width) for images. If None, computed from data.
     
     Returns
     -------
     matplotlib.figure.Figure
         The matplotlib figure object
     """
-    # Determine grades, levels, sides to display
+    # Get or compute target size
+    print(f"Image size: {target_size}")
+    
+    # Determine grades
     grades = sorted(data_by_grade.keys())
-    all_levels = set()
-    for level_dict in data_by_grade.values():
-        all_levels.update(level_dict.keys())
-    levels = sorted(all_levels)
     
-    # Create dict to plot
-    dict_to_plot = {}
+    # Collect all images with metadata for each grade
+    images_by_grade = {}
     for grade in grades:
-        dict_to_plot[grade] = {}
-        for level in levels:
-            images_list = []
-            for side in ['left', 'right']:
-                images_list.extend(data_by_grade[grade][level][side])
-            random.shuffle(images_list)
-            dict_to_plot[grade] = {'images': images_list[:max_examples]}
+        grade_images = []
+        for level in sorted(data_by_grade[grade].keys()):
+            for side in sorted(data_by_grade[grade][level].keys()):
+                images_list = data_by_grade[grade][level][side]
+                for img_path in images_list:
+                    grade_images.append({
+                        'path': img_path,
+                        'level': level,
+                        'side': side
+                    })
+        # Shuffle and limit
+        random.shuffle(grade_images)
+        images_by_grade[grade] = grade_images[:max_examples]
     
-    n_rows = 10
+    n_rows = max(len(images_by_grade[g]) for g in grades)
     n_cols = len(grades)
     
-    # Calculate figure size
-    cell_width = 3
-    cell_height = 3
+    # Calculate figure size based on image dimensions
+    img_height_inches = target_size[0] / 80  # convert pixels to inches (80 dpi baseline)
+    img_width_inches = target_size[1] / 80
+    
+    cell_width = img_width_inches * 1.3
+    cell_height = img_height_inches * 1.4
     fig_width = n_cols * cell_width
     fig_height = n_rows * cell_height
     
     fig, axes = plt.subplots(
         n_rows, n_cols,
         figsize=(fig_width, fig_height),
-        gridspec_kw={'hspace': 0.35, 'wspace': 0.2}
+        gridspec_kw={'hspace': 0.4, 'wspace': 0.2}
     )
     
     # Ensure axes is always 2D
@@ -311,25 +355,46 @@ def create_grade_table(data_by_grade, max_examples=20):
     for col_idx, grade in enumerate(grades):
         # Add grade label as column header
         axes[0, col_idx].text(
-            0.5, 1.15, f'Grade {grade}',
+            0.5, 1.10, f'Grade {grade}',
             ha='center', va='bottom',
             fontsize=14, fontweight='bold',
             transform=axes[0, col_idx].transAxes
         )
         
-        for row_idx, img in enumerate(dict_to_plot[grade]['images']):
+        for row_idx in range(n_rows):
             ax = axes[row_idx, col_idx]
             ax.set_xlim(0, 1)
             ax.set_ylim(0, 1)
             ax.axis('off')
             
-            # Get image for this cell
-            img_array = load_image(img)
-            ax.imshow(img_array, cmap='gray')
+            # Check if we have an image for this cell
+            if row_idx < len(images_by_grade[grade]):
+                img_data = images_by_grade[grade][row_idx]
+                img_path = img_data['path']
+                level = img_data['level']
+                side = img_data['side']
+                
+                # Load image
+                img_array = load_image(img_path, target_size)
+                
+                if img_array is not None:
+                    # Display image
+                    ax.imshow(img_array, cmap='gray')
+                    
+                    # Add level and side label below the image
+                    disc_name = map_level_to_disc(level)
+                    side_label = 'L' if side == 'left' else 'R'
+                    ax.text(
+                        0.5, -0.08,
+                        f'{disc_name}-{side_label}',
+                        ha='center', va='top',
+                        fontsize=9, style='italic', fontweight='bold',
+                        transform=ax.transAxes
+                    )
     
     # Add title
     fig.suptitle(
-        'Foraminal Stenosis: Examples by Grade and Level',
+        'Foraminal Stenosis: Examples by Grade',
         fontsize=16, fontweight='bold', y=0.98
     )
     
@@ -369,9 +434,11 @@ def main():
     
     # Create figure
     print("\nCreating figure...")
+    target_size = get_max_image_size(data_by_grade)
     fig = create_grade_table(
         data_by_grade,
-        max_examples=args.max_examples_per_cell
+        max_examples=args.max_examples_per_cell,
+        target_size=target_size
     )
     
     # Save figure
