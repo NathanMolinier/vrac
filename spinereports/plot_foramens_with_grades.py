@@ -224,6 +224,7 @@ def get_max_image_size(data_by_grade):
     """
     max_h = 0
     max_w = 0
+    count = 0
     
     for grade_dict in data_by_grade.values():
         for level_dict in grade_dict.values():
@@ -231,13 +232,16 @@ def get_max_image_size(data_by_grade):
                 for img_path in side_list:
                     try:
                         img = PILImage.open(img_path)
-                        img = img.convert('L')
-                        w, h = img.size
+                        img_rgb = img.convert('RGB')  # Handle different formats
+                        w, h = img_rgb.size
                         max_h = max(max_h, h)
                         max_w = max(max_w, w)
+                        count += 1
                     except Exception as e:
+                        print(f"Warning: Could not read image {img_path}: {e}")
                         continue
     
+    print(f"Scanned {count} images. Max size: ({max_h}, {max_w})")
     # Add some padding for display
     return (max_h + 20, max_w + 20)
 
@@ -259,26 +263,45 @@ def load_image(image_path, target_size):
         Padded grayscale image array, or None if loading fails
     """
     try:
+        # Open image as RGB first to handle various formats
         img = PILImage.open(image_path)
         
-        # Convert to grayscale
-        img = img.convert('L')
+        # Convert to RGB (handles RGBA, grayscale, etc.)
+        if img.mode != 'RGB' and img.mode != 'L':
+            img = img.convert('RGB')
         
-        # Resize to fit within target dimensions while maintaining aspect ratio
-        img.thumbnail(target_size, PILImage.Resampling.LANCZOS)
+        # Convert to grayscale if needed
+        if img.mode != 'L':
+            img = img.convert('L')
         
-        # Get image dimensions
+        # Get original dimensions
+        orig_w, orig_h = img.size
+        
+        # Calculate scaling to fit within target while maintaining aspect ratio
+        target_h, target_w = target_size
+        scale = min(target_h / orig_h, target_w / orig_w)
+        
+        # Resize
+        new_w = int(orig_w * scale)
+        new_h = int(orig_h * scale)
+        img = img.resize((new_w, new_h), PILImage.Resampling.LANCZOS)
+        
+        # Convert to numpy array
         img_array = np.array(img)
-        h, w = img_array.shape
+        
+        # Ensure uint8 type
+        if img_array.dtype != np.uint8:
+            img_array = np.clip(img_array, 0, 255).astype(np.uint8)
         
         # Pad to target size with black background (0)
         padded = np.zeros(target_size, dtype=np.uint8)
         
         # Calculate padding to center the image
-        y_offset = (target_size[0] - h) // 2
-        x_offset = (target_size[1] - w) // 2
+        y_offset = (target_h - img_array.shape[0]) // 2
+        x_offset = (target_w - img_array.shape[1]) // 2
         
-        padded[y_offset:y_offset + h, x_offset:x_offset + w] = img_array
+        padded[y_offset:y_offset + img_array.shape[0], 
+               x_offset:x_offset + img_array.shape[1]] = img_array
         
         return padded
     except Exception as e:
@@ -304,8 +327,11 @@ def create_grade_table(data_by_grade, max_examples=20, target_size=None):
     matplotlib.figure.Figure
         The matplotlib figure object
     """
-    # Get or compute target size
-    print(f"Image size: {target_size}")
+    # Compute target size if not provided
+    if target_size is None:
+        target_size = get_max_image_size(data_by_grade)
+    
+    print(f"Using image size: {target_size}")
     
     # Determine grades
     grades = sorted(data_by_grade.keys())
@@ -331,13 +357,15 @@ def create_grade_table(data_by_grade, max_examples=20, target_size=None):
     n_cols = len(grades)
     
     # Calculate figure size based on image dimensions
-    img_height_inches = target_size[0] / 80  # convert pixels to inches (80 dpi baseline)
-    img_width_inches = target_size[1] / 80
+    img_height_inches = target_size[0] / 100  # convert pixels to inches
+    img_width_inches = target_size[1] / 100
     
-    cell_width = img_width_inches * 1.3
-    cell_height = img_height_inches * 1.4
+    cell_width = img_width_inches * 1.2
+    cell_height = img_height_inches * 1.3
     fig_width = n_cols * cell_width
     fig_height = n_rows * cell_height
+    
+    print(f"Figure size: {fig_width:.1f}x{fig_height:.1f} inches, {n_rows}x{n_cols} grid")
     
     fig, axes = plt.subplots(
         n_rows, n_cols,
@@ -363,8 +391,6 @@ def create_grade_table(data_by_grade, max_examples=20, target_size=None):
         
         for row_idx in range(n_rows):
             ax = axes[row_idx, col_idx]
-            ax.set_xlim(0, 1)
-            ax.set_ylim(0, 1)
             ax.axis('off')
             
             # Check if we have an image for this cell
@@ -378,8 +404,8 @@ def create_grade_table(data_by_grade, max_examples=20, target_size=None):
                 img_array = load_image(img_path, target_size)
                 
                 if img_array is not None:
-                    # Display image
-                    ax.imshow(img_array, cmap='gray')
+                    # Display image with proper normalization
+                    ax.imshow(img_array, cmap='gray', vmin=0, vmax=255, aspect='auto')
                     
                     # Add level and side label below the image
                     disc_name = map_level_to_disc(level)
