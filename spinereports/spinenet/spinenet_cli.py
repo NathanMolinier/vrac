@@ -8,9 +8,8 @@ MRI scans (NIfTI format) and generate visualization outputs.
 Installation:
 - python=3.9
 - pip install matplotlib nibabel
-- pip install -r requirements.txt
+- pip install -r requirements.txt with numpy<2
 - python3 -m pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu118 --upgrade
-- numpy<2
 
 Usage:
     python spinenet_cli.py input_image.nii.gz --output output_dir
@@ -27,7 +26,7 @@ import nibabel as nib
 import cv2
 import torch
 import spinenet
-from vrac.data_management.image import Image
+from vrac.data_management.image import Image, resample_nib
 from scipy.ndimage import zoom
 
 
@@ -291,8 +290,11 @@ def main():
     
     # Reorient to RAS
     print("Reorienting image...")
-    image = image.change_orientation('RPI')
-    
+    image = image.change_orientation('RSP')
+
+    # Resample because spinenet does not work without it
+    image = resample_nib(image, new_size=[1, 1, 1], new_size_type='mm', interpolation='linear', verbose=False) 
+
     # Get spacing information
     nx, ny, nz, nt, sx, sy, sz, st = image.dim
     pixel_spacing = np.array([sx, sy])
