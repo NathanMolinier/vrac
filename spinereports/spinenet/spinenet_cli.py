@@ -7,8 +7,7 @@ MRI scans (NIfTI format) and generate visualization outputs.
 
 Installation:
 - python=3.9
-- pip install matplotlib nibabel
-- pip install -r requirements.txt with numpy<2
+- pip install -r requirements.txt with numpy<1.20 matplotlib nibabel seaborn
 - python3 -m pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu118 --upgrade
 
 Usage:
@@ -22,7 +21,6 @@ from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
-import nibabel as nib
 import cv2
 import torch
 import spinenet
@@ -365,6 +363,14 @@ def main():
             str(json_path)
         )
         print()
+    
+    # Perform radiological grading
+    ivd_dicts = spnt.get_ivds_from_vert_dicts(vert_dicts, scan.volume)
+
+    # grade IVDs - note that this is only validated on IVDs from L5/S1 to T12/L5 vertebrae.
+    # IVDs gradings are output as a pandas dictionary. For information on the grading schemes used, see http://zeus.robots.ox.ac.uk/spinenet2/
+    ivd_grades = spnt.grade_ivds(ivd_dicts)
+    ivd_grades.to_csv(f"{str(output_dir)}/ivd_grades.csv")
     
     print(f"{'=' * 50}")
     print(f"Processing complete!")
