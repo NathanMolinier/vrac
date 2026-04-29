@@ -74,6 +74,7 @@ def main():
         out_img.data[img.data == 1] = vert_id
     
     out_img.save(out_path)
+    print(f"Merged masks saved to {out_path}")
 
 if __name__=='__main__':
     main()       
