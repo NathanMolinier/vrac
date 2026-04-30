@@ -42,8 +42,8 @@ def main() -> None:
             img = Image(str(input_path))
 
             # Set vertebrae values to 1 and discs values to 2
-            vert_data = (10 < img.data < 46).astype(np.uint8)
-            disc_data = (60 < img.data < 101).astype(np.uint8) * 2
+            vert_data = ((img.data > 10) & (img.data < 46)).astype(np.uint8)
+            disc_data = ((img.data > 60) & (img.data < 101)).astype(np.uint8) * 2
 
             # Create a new Image object with the binarized data
             out_img = zeros_like(img)
