@@ -39,8 +39,7 @@ def main() -> None:
             output_path = output_folder / file
 
             # Load the image
-            print(f"Processing {input_path}...")
-            img = Image(input_path)
+            img = Image(str(input_path))
 
             # Set vertebrae values to 1 and discs values to 2
             vert_data = (10 < img.data < 46).astype(np.uint8)
@@ -51,7 +50,7 @@ def main() -> None:
             out_img.data = vert_data + disc_data
 
             # Save the binarized image
-            out_img.save(output_path)
+            out_img.save(str(output_path))
 
 
 if __name__ == "__main__":
