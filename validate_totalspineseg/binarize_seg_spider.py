@@ -39,6 +39,7 @@ def main() -> None:
             output_path = output_folder / file
 
             # Load the image
+            print(f"Processing {input_path}...")
             img = Image(input_path)
 
             # Set vertebrae values to 1 and discs values to 2
