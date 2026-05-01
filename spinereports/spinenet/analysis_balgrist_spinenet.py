@@ -565,16 +565,16 @@ def main() -> None:
     outcomes = ["spinal canal stenosis ALL", "foraminal stenosis ALL"]
     print(f"  Found outcomes: {outcomes}")
 
-    # Add column spinenet_ForaminalStenosis_side
+    # Add column spinenet_ForaminalStenosisSide
     side_dict = {"links": "Left", "rechts": "Right"}
-    for row in merged.itertuples():
+    for idx, row in merged.iterrows():
         side = row["Side"]
-        merged.loc[row.Index, "spinenet_ForaminalStenosis_side"] = merged.loc[row.Index, f"spinenet_ForaminalStenosis{side_dict.get(side, '')}"]
+        if side in side_dict:
+            col_name = f"spinenet_ForaminalStenosis{side_dict[side]}"
+            merged.loc[idx, "spinenet_ForaminalStenosisSide"] = row[col_name]
 
     # Feature columns (SpineNet predictions)
-    feature_cols = [c for c in merged.columns if c.startswith("spinenet_")]
-    if not feature_cols:
-        raise SystemExit("No SpineNet prediction columns found")
+    feature_cols = ['spinenet_CentralCanalStenosis', 'spinenet_ForaminalStenosisSide']
     print(f"  Using features: {feature_cols}")
 
     # Compute correlations
