@@ -127,7 +127,10 @@ def load_spinenet_predictions(pred_dir: Path) -> "pd.DataFrame":
             # Extract the three outcomes we care about
             for outcome in ["CentralCanalStenosis", "ForaminalStenosisLeft", "ForaminalStenosisRight"]:
                 if outcome in row:
-                    val = row[outcome]
+                    if outcome == "CentralCanalStenosis":
+                        val = row[outcome] - 1 # Convert from 1-4 to 0-3
+                    else:
+                        val = row[outcome]
                     try:
                         record[f"spinenet_{outcome}"] = float(val) if pd.notna(val) else np.nan
                     except (ValueError, TypeError):
