@@ -13,6 +13,7 @@ def get_parser():
     parser = argparse.ArgumentParser(description='Fetch information from BIDS dataset JSON sidecars.')
     parser.add_argument('--path-input', required=True, help='If path endswith .json, will be treated as config else treated as an input folder path to a BIDS dataset.')
     parser.add_argument('--file-pattern', default='*', help='Pattern to match files (e.g., "*_acq-sag_T2w*").')
+    parser.add_argument('--config-split', default='TRAINING', help='Split to use from the config file if specified.')
     parser.add_argument('--output-csv', help='Path to save the output CSV file.')
     return parser
 
@@ -27,7 +28,7 @@ def main():
     if dataset_path.suffix == '.json':
         with open(dataset_path, 'r') as f:
             config = json.load(f)
-        split = 'TRAINING'
+        split = args.config_split
         dataset_path = Path(config['DATASETS_PATH'])
         image_files = [dataset_path /d['IMAGE'] for d in config[split]]
     else:
