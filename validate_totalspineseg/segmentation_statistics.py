@@ -4,7 +4,7 @@ from scipy.stats import wilcoxon
 from statsmodels.stats.multitest import multipletests
 
 def main():
-    all_metrics_path = "/Users/nathan/Desktop/all_metrics_tssXtotalXspineps/review_v2"
+    all_metrics_path = "/Users/nathan/Desktop/all_metrics_tssXtotalXspineps/comparison_instance"
     structures = [s for s in os.listdir(all_metrics_path) if os.path.isdir(os.path.join(all_metrics_path, s)) and len(os.listdir(os.path.join(all_metrics_path, s))) > 0]
     metrics_list = ['DiceSimilarityCoefficient', 'HausdorffDistance95', 'NormalizedSurfaceDistance']
     methods_list = ['tss', 'total', 'spineps']
@@ -26,10 +26,12 @@ def main():
             with open(metrics_file_path, 'r') as f:
                 reader = csv.DictReader(f)
                 for row in reader:
-                    input_file = os.path.basename(row['prediction'])
-                    if 'input_file' not in metrics_dict[structure][method]:
-                        metrics_dict[structure][method]['input_file'] = []
-                    metrics_dict[structure][method]['input_file'].append(input_file)
+                    file = os.path.basename(row['prediction'])
+                    label = row['label'].replace(' ','')
+                    match_key = f"{file}_{label}" 
+                    if 'match_key' not in metrics_dict[structure][method]:
+                        metrics_dict[structure][method]['match_key'] = []
+                    metrics_dict[structure][method]['match_key'].append(match_key)
                     for metric in metrics_list:
                         if metric not in metrics_dict[structure][method].keys():
                             metrics_dict[structure][method][metric] = []
@@ -51,9 +53,9 @@ def main():
                 proposed_values = metrics_dict[structure][proposed_method][metric]
                 new_baseline_values = []
                 new_proposed_values = []
-                for idx, subject in enumerate(metrics_dict[structure][method]['input_file']):
-                    if subject in metrics_dict[structure][proposed_method]['input_file']:
-                        proposed_idx = metrics_dict[structure][proposed_method]['input_file'].index(subject)
+                for idx, match_key in enumerate(metrics_dict[structure][method]['match_key']):
+                    if match_key in metrics_dict[structure][proposed_method]['match_key']:
+                        proposed_idx = metrics_dict[structure][proposed_method]['match_key'].index(match_key)
                         new_baseline_values.append(baseline_values[idx])
                         new_proposed_values.append(proposed_values[proposed_idx])
                 paired_dict[structure][method][metric]["baseline"] = new_baseline_values
