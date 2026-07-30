@@ -33,6 +33,8 @@ def main():
             if not metric in stats[methods].keys():
                 stats[methods][metric] = {}
             for contrast in metrics_dict[methods][metric].keys():
+                if contrast == "failed":
+                    continue
                 if not contrast in stats[methods][metric]:
                     stats[methods][metric][contrast] = {}
                 values = metrics_dict[methods][metric][contrast]
@@ -49,13 +51,14 @@ def main():
                 if contrast == "all":
                     print(f"\n{methods} - {metric}")
                     print(f"mean={mean:.4f}, std={std:.4f}, ci=({mean - ci:.4f}, {mean + ci:.4f})")
+                    print(f"failed={metrics_dict[methods][metric]['failed']}")
 
     # Run pairwise Wilcoxon signed-rank tests
     for metric in metrics_list:
         raw_p_values = []
         comparisons = []
         for method in paired_dict.keys():
-            if method.startswith('tss'):
+            if method.startswith('tss_all'):
                 continue
         
             baseline_values = np.array(paired_dict[method][metric]["baseline"])
@@ -97,6 +100,7 @@ def add_subject_metrics(paired_dict, metrics_dict, contrast, row, metrics_list, 
             if not metric in metrics_dict[methods].keys():
                 metrics_dict[methods][metric] = {}
                 paired_dict[methods][metric] = {}
+                metrics_dict[methods][metric]["failed"] = 0
 
             # Remove only failed detections
             if float(row[f"{metric}_{methods}"]) != -1:
@@ -106,6 +110,8 @@ def add_subject_metrics(paired_dict, metrics_dict, contrast, row, metrics_list, 
                     metrics_dict[methods][metric]["all"] = []
                 metrics_dict[methods][metric][contrast].append(float(row[f"{metric}_{methods}"]))
                 metrics_dict[methods][metric]["all"].append(float(row[f"{metric}_{methods}"]))
+            else:                    
+                metrics_dict[methods][metric]["failed"] += 1
 
             # Add paired values
             if float(row[f"{metric}_{methods}"]) != -1 and float(row[f"{metric}_{proposed_method}"]) != -1:
