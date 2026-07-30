@@ -1,6 +1,6 @@
 import csv
 import numpy as np
-from scipy.stats import wilcoxon
+from scipy.stats import wilcoxon, bootstrap
 from statsmodels.stats.multitest import multipletests
 
 def main():
@@ -43,14 +43,25 @@ def main():
                 stats[methods][metric][contrast]['mean'] = mean
                 stats[methods][metric][contrast]['std'] = std
 
-                # Confidence interval (95%)
-                ci = 1.96 * std / (len(values) ** 0.5)
-                stats[methods][metric][contrast]['ci min'] = mean - ci
-                stats[methods][metric][contrast]['ci max'] = mean + ci
+                # Bootstrap confidence interval (95%)
+                scipy_bootstrap = bootstrap(
+                    (np.array(values),), 
+                    np.mean, 
+                    confidence_level=0.95, 
+                    n_resamples=10000, 
+                    method='bca',
+                    random_state=42
+                )
+
+                scipy_ci_low = scipy_bootstrap.confidence_interval.low
+                scipy_ci_high = scipy_bootstrap.confidence_interval.high
+
+                stats[methods][metric][contrast]['ci min'] = scipy_ci_low
+                stats[methods][metric][contrast]['ci max'] = scipy_ci_high
 
                 if contrast == "all":
                     print(f"\n{methods} - {metric}")
-                    print(f"mean={mean:.4f}, std={std:.4f}, ci=({mean - ci:.4f}, {mean + ci:.4f})")
+                    print(f"mean={mean:.4f}, std={std:.4f}, ci=({scipy_ci_low:.4f}, {scipy_ci_high:.4f})")
                     print(f"failed={metrics_dict[methods][metric]['failed']}")
 
     # Run pairwise Wilcoxon signed-rank tests
