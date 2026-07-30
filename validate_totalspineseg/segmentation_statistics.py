@@ -1,6 +1,6 @@
 import os, csv
 import numpy as np
-from scipy.stats import wilcoxon
+from scipy.stats import wilcoxon, bootstrap
 from statsmodels.stats.multitest import multipletests
 
 def main():
@@ -78,13 +78,24 @@ def main():
                 stats[structure][method][metric]['mean'] = mean
                 stats[structure][method][metric]['std'] = std
 
-                # Confidence interval (95%)
-                ci = 1.96 * std / (len(values) ** 0.5)
-                stats[structure][method][metric]['ci min'] = mean - ci
-                stats[structure][method][metric]['ci max'] = mean + ci
+                # Bootstrap confidence interval (95%)
+                scipy_bootstrap = bootstrap(
+                    (np.array(values),), 
+                    np.mean, 
+                    confidence_level=0.95, 
+                    n_resamples=10000, 
+                    method='bca',
+                    random_state=42
+                )
+
+                scipy_ci_low = scipy_bootstrap.confidence_interval.low
+                scipy_ci_high = scipy_bootstrap.confidence_interval.high
+
+                stats[structure][method][metric]['ci min'] = scipy_ci_low
+                stats[structure][method][metric]['ci max'] = scipy_ci_high
 
                 print(f"\n{structure} - {method} - {metric}")
-                print(f"mean={mean:.4f}, std={std:.4f}, ci=({mean - ci:.4f}, {mean + ci:.4f})")
+                print(f"mean={mean:.4f}, std={std:.4f}, ci=({scipy_ci_low:.4f}, {scipy_ci_high:.4f})")
 
     # Run pairwise Wilcoxon signed-rank tests
     for structure in paired_dict.keys():
