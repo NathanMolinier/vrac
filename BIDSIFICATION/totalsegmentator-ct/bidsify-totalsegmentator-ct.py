@@ -151,8 +151,9 @@ def main(path_dataset, path_output):
 
     participants = []
     processed_images = 0
+    processed_segs = 0
     processed_jsons = 0
-    labels = {}
+    labels = None
 
     img_dirs = [di for di in os.listdir(path_dataset) if di.startswith('s')]
 
@@ -185,7 +186,7 @@ def main(path_dataset, path_output):
         seg_files = sorted([f for f in os.listdir(segmentations_folder) if f.endswith('.nii.gz')])
         if len(seg_files) != 117:
             raise ValueError(f"Expected 117 segmentation files in {segmentations_folder}, found {len(seg_files)}")
-        if not labels:
+        if labels is None:
             labels = {i+1:f.replace('.nii.gz', '') for i, f in enumerate(seg_files)}
 
         seg_path_out = os.path.join(anat_dir, normalize_filename(subject_bids, label=True))
@@ -201,24 +202,28 @@ def main(path_dataset, path_output):
             if not part.data.shape == seg.data.shape:
                 raise ValueError(f"Segmentation shape {part.data.shape} does not match image shape {seg.data.shape} for {seg_path_in}")
 
-            if sorted(np.unique(part.data)) == [0, 1]:
-                raise ValueError(f"Segmentation {seg_path_in} has other values than [0, 1].")
+            unique_vals = set(np.unique(part.data).tolist())
+            if not unique_vals.issubset({0, 1}):
+                raise ValueError(f"Segmentation {seg_path_in} has values other than [0, 1]: {sorted(unique_vals)}")
+
+            if unique_vals == {0}:
+                logger.warning(f'Empty segmentation (all zeros): {seg_path_in}')
+                continue
 
             if seg.data[part.data == 1].any():
                 raise ValueError(f"Segmentation {seg_path_in} overlaps with previous segmentations.")
-            
+
             seg.data[part.data == 1] = i
 
         # Save the combined segmentation
         seg.save(seg_path_out)
-
-        # Save JSON sidecar for labels
-        create_json_sidecar(path_file_out, labels)
-        processed_jsons += 1
-        logger.info(f'Saved: {path_file_out}')
-
-        processed_images += 1
+        processed_segs += 1
         logger.info(f'Saved: {seg_path_out}')
+
+        # Save JSON sidecar for labels (alongside the segmentation)
+        create_json_sidecar(seg_path_out, labels)
+        processed_jsons += 1
+        logger.info(f'Saved: {seg_path_out.replace(".nii.gz", ".json")}')
 
     # Write metadata
     file_metadata = os.path.join(path_dataset, "meta.csv")
@@ -229,7 +234,8 @@ def main(path_dataset, path_output):
 
     logger.info(f'\nBIDS conversion completed at {datetime.datetime.now()}')
     logger.info(f'Processed {len(participants)} participants')
-    logger.info(f'Successfully processed {processed_images} NIfTI images')
+    logger.info(f'Successfully processed {processed_images} CT images')
+    logger.info(f'Successfully processed {processed_segs} segmentations')
     logger.info(f'Successfully processed {processed_jsons} JSON files')
 
 
