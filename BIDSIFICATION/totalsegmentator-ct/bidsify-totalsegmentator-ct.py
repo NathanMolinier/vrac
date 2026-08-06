@@ -211,7 +211,7 @@ def main(path_dataset, path_output):
                 continue
 
             if seg.data[part.data == 1].any():
-                raise ValueError(f"Segmentation {seg_path_in} overlaps with previous segmentations.")
+                logger.warning(f"{subject_bids}: Segmentation {seg_path_in} overlaps with previous segmentations.")
 
             seg.data[part.data == 1] = i
 
