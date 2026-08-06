@@ -170,55 +170,55 @@ def main(path_dataset, path_output):
         if subject_bids not in [p[0] for p in participants]:
             participants.append((subject_bids, di))
         
-        # normalized_fname = normalize_filename(subject_bids)
-        # path_file_out = os.path.join(anat_dir, normalized_fname)
+        normalized_fname = normalize_filename(subject_bids)
+        path_file_out = os.path.join(anat_dir, normalized_fname)
 
-        # # Image: load, RPI, save
-        # logger.info(f'Processing image: {path_file_in}')
-        # img = Image(path_file_in).change_orientation('RPI')
-        # img.save(path_file_out)
-        # processed_images += 1
-        # logger.info(f'Saved: {path_file_out}')
+        # Image: load, RPI, save
+        logger.info(f'Processing image: {path_file_in}')
+        img = Image(path_file_in).change_orientation('RPI')
+        img.save(path_file_out)
+        processed_images += 1
+        logger.info(f'Saved: {path_file_out}')
 
-        # # Handle segmentations
-        # segmentations_folder = os.path.join(path_dataset, di, "segmentations")
-        # seg_files = sorted([f for f in os.listdir(segmentations_folder) if f.endswith('.nii.gz')])
-        # if len(seg_files) != 117:
-        #     raise ValueError(f"Expected 117 segmentation files in {segmentations_folder}, found {len(seg_files)}")
-        # if not labels:
-        #     labels = {i+1:f.replace('.nii.gz', '') for i, f in enumerate(seg_files)}
+        # Handle segmentations
+        segmentations_folder = os.path.join(path_dataset, di, "segmentations")
+        seg_files = sorted([f for f in os.listdir(segmentations_folder) if f.endswith('.nii.gz')])
+        if len(seg_files) != 117:
+            raise ValueError(f"Expected 117 segmentation files in {segmentations_folder}, found {len(seg_files)}")
+        if not labels:
+            labels = {i+1:f.replace('.nii.gz', '') for i, f in enumerate(seg_files)}
 
-        # seg_path_out = os.path.join(anat_dir, normalize_filename(subject_bids, label=True))
-        # seg = zeros_like(img)
-        # for i, file in labels.items():
-        #     seg_path_in = os.path.join(segmentations_folder, f"{file}.nii.gz")
+        seg_path_out = os.path.join(anat_dir, normalize_filename(subject_bids, label=True))
+        seg = zeros_like(img)
+        for i, file in labels.items():
+            seg_path_in = os.path.join(segmentations_folder, f"{file}.nii.gz")
 
-        #     # Image: load, RPI, save
-        #     logger.info(f'Processing segmentation: {seg_path_in}')
-        #     part = Image(seg_path_in).change_orientation('RPI')
+            # Image: load, RPI, save
+            logger.info(f'Processing segmentation: {seg_path_in}')
+            part = Image(seg_path_in).change_orientation('RPI')
 
-        #     # Check for errors with segmentation
-        #     if not part.data.shape == seg.data.shape:
-        #         raise ValueError(f"Segmentation shape {part.data.shape} does not match image shape {seg.data.shape} for {seg_path_in}")
+            # Check for errors with segmentation
+            if not part.data.shape == seg.data.shape:
+                raise ValueError(f"Segmentation shape {part.data.shape} does not match image shape {seg.data.shape} for {seg_path_in}")
 
-        #     if sorted(np.unique(part.data)) == [0, 1]:
-        #         raise ValueError(f"Segmentation {seg_path_in} has other values than [0, 1].")
+            if sorted(np.unique(part.data)) == [0, 1]:
+                raise ValueError(f"Segmentation {seg_path_in} has other values than [0, 1].")
 
-        #     if seg.data[part.data == 1].any():
-        #         raise ValueError(f"Segmentation {seg_path_in} overlaps with previous segmentations.")
+            if seg.data[part.data == 1].any():
+                raise ValueError(f"Segmentation {seg_path_in} overlaps with previous segmentations.")
             
-        #     seg.data[part.data == 1] = i
+            seg.data[part.data == 1] = i
 
-        # # Save the combined segmentation
-        # seg.save(seg_path_out)
+        # Save the combined segmentation
+        seg.save(seg_path_out)
 
-        # # Save JSON sidecar for labels
-        # create_json_sidecar(path_file_out, labels)
-        # processed_jsons += 1
-        # logger.info(f'Saved: {path_file_out}')
+        # Save JSON sidecar for labels
+        create_json_sidecar(path_file_out, labels)
+        processed_jsons += 1
+        logger.info(f'Saved: {path_file_out}')
 
-        # processed_images += 1
-        # logger.info(f'Saved: {seg_path_out}')
+        processed_images += 1
+        logger.info(f'Saved: {seg_path_out}')
 
     # Write metadata
     file_metadata = os.path.join(path_dataset, "meta.csv")
