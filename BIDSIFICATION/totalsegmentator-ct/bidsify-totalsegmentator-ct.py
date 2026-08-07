@@ -240,10 +240,10 @@ def main(path_dataset, path_output):
 
 
 if __name__ == "__main__":
-    # parser = get_parser()
-    # args = parser.parse_args()
+    parser = get_parser()
+    args = parser.parse_args()
 
     # Default paths from your provided tree.txt example
-    path_dataset = "/Users/nathan/data/totalsegmentator-ct/Totalsegmentator_dataset_v201"  # os.path.abspath(args.path_dataset)
-    path_output = "/Users/nathan/data/totalsegmentator-ct/fullbody-totalsegmentator-ct"  # os.path.abspath(args.path_output)
+    path_dataset = os.path.abspath(args.path_dataset)
+    path_output = os.path.abspath(args.path_output)
     main(path_dataset, path_output)
