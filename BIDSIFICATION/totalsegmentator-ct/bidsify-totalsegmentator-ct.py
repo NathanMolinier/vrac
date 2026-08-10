@@ -123,7 +123,7 @@ def copy_script(path_output):
 
 def normalize_filename(subject_bids, label=False):
     if label:
-        return f"{subject_bids}_label-body_dseg.nii.gz"
+        return f"{subject_bids}_CT_label-body_dseg.nii.gz"
     else:
         return f"{subject_bids}_CT.nii.gz"
 
