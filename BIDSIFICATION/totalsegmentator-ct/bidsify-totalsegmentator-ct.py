@@ -214,8 +214,8 @@ def main(path_dataset, path_output):
                 logger.warning(f'Empty segmentation (all zeros): {seg_path_in}')
                 continue
 
-            if seg.data[part.data == 1].any():
-                logger.warning(f"{subject_bids}: Segmentation {seg_path_in} overlaps with previous segmentations.")
+            # if seg.data[part.data == 1].any():
+            #     logger.warning(f"{subject_bids}: Segmentation {seg_path_in} overlaps with previous segmentations.")
 
             seg.data[part.data == 1] = i
 
