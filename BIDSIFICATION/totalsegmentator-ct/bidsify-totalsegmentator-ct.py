@@ -189,7 +189,11 @@ def main(path_dataset, path_output):
         if labels is None:
             labels = {i+1:f.replace('.nii.gz', '') for i, f in enumerate(seg_files)}
 
-        seg_path_out = os.path.join(anat_dir, normalize_filename(subject_bids, label=True))
+        # Create derivatives folder
+        derivatives_dir = os.path.join(path_output, 'derivatives', 'labels')
+        create_folder(derivatives_dir)
+
+        seg_path_out = os.path.join(derivatives_dir, subject_bids, 'anat', normalize_filename(subject_bids, label=True))
         seg = zeros_like(img)
         for i, file in labels.items():
             seg_path_in = os.path.join(segmentations_folder, f"{file}.nii.gz")
