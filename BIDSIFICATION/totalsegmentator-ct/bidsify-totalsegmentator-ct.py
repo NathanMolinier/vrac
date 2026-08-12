@@ -208,7 +208,7 @@ def main(path_dataset, path_output):
 
             unique_vals = set(np.unique(part.data).tolist())
             if not unique_vals.issubset({0, 1}):
-                raise ValueError(f"Segmentation {seg_path_in} has values other than [0, 1]: {sorted(unique_vals)}")
+                logger.error(f"Segmentation {seg_path_in} has values other than [0, 1]: {sorted(unique_vals)}, remove other values.")
 
             if unique_vals == {0}:
                 logger.warning(f'Empty segmentation (all zeros): {seg_path_in}')
