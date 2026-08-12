@@ -125,7 +125,8 @@ def create_participants_json(path_output):
                 "DCM": "Degenerative Cervical Myelopathy (synonymous with CSM - Cervical Spondylotic Myelopathy)",
                 "MildCompression": "Asymptomatic cord compression, without myelopathy",
                 "MS": "Multiple Sclerosis",
-                "SCI": "Traumatic Spinal Cord Injury"
+                "SCI": "Traumatic Spinal Cord Injury",
+                "CanalStenosis": "Canal compression"
             }
         },
         "institution": {
