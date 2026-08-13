@@ -97,7 +97,8 @@ def refine_segmentation(session, img_path, seg_path, output_path):
 
     # Save results
     out_path = os.path.join(output_path, os.path.basename(img_path).replace('.nii.gz', '_label-refined_dseg.nii.gz'))
-
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
     print(f"Saving refined segmentation to {out_path}")
     out_img.data = out_img.data.astype(np.uint8)
     out_img.save(out_path)
@@ -110,7 +111,7 @@ def get_parser():
     parser = argparse.ArgumentParser(description='Refine segmentation using nnInteractive.')
     parser.add_argument('--image', '-i', required=True, help='Path to the input image (Required)')
     parser.add_argument('--seg', '-s', required=True, help='Path to the input segmentation (Required)')
-    parser.add_argument('--out', '-o', required=True, help='Path of the output segmentation (Required)')
+    parser.add_argument('--out', '-o', required=True, help='Path of the output folder (Required)')
     return parser
 
 
