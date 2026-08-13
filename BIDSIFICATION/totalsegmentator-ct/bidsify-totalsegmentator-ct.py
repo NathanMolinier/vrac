@@ -176,8 +176,8 @@ def main(path_dataset, path_output):
 
         # Image: load, RPI, save
         logger.info(f'Processing image: {path_file_in}')
-        img = Image(path_file_in).change_orientation('RPI')
-        img.save(path_file_out)
+        # img = Image(path_file_in).change_orientation('RPI')
+        # img.save(path_file_out)
         processed_images += 1
         logger.info(f'Saved: {path_file_out}')
 
@@ -194,33 +194,33 @@ def main(path_dataset, path_output):
         create_folder(derivatives_anat_dir)
 
         seg_path_out = os.path.join(derivatives_anat_dir, normalize_filename(subject_bids, label=True))
-        seg = zeros_like(img)
+        # seg = zeros_like(img)
         for i, file in labels.items():
             seg_path_in = os.path.join(segmentations_folder, f"{file}.nii.gz")
 
             # Image: load, RPI, save
             logger.info(f'Processing segmentation: {seg_path_in}')
-            part = Image(seg_path_in).change_orientation('RPI')
+            # part = Image(seg_path_in).change_orientation('RPI')
 
-            # Check for errors with segmentation
-            if not part.data.shape == seg.data.shape:
-                raise ValueError(f"Segmentation shape {part.data.shape} does not match image shape {seg.data.shape} for {seg_path_in}")
+            # # Check for errors with segmentation
+            # if not part.data.shape == seg.data.shape:
+            #     raise ValueError(f"Segmentation shape {part.data.shape} does not match image shape {seg.data.shape} for {seg_path_in}")
 
-            unique_vals = set(np.unique(part.data).tolist())
-            if not unique_vals.issubset({0, 1}):
-                logger.error(f"Segmentation {seg_path_in} has values other than [0, 1]: {sorted(unique_vals)}, remove other values.")
+            # unique_vals = set(np.unique(part.data).tolist())
+            # if not unique_vals.issubset({0, 1}):
+            #     logger.error(f"Segmentation {seg_path_in} has values other than [0, 1]: {sorted(unique_vals)}, remove other values.")
 
-            if unique_vals == {0}:
-                logger.warning(f'Empty segmentation (all zeros): {seg_path_in}')
-                continue
+            # if unique_vals == {0}:
+            #     logger.warning(f'Empty segmentation (all zeros): {seg_path_in}')
+            #     continue
 
             # if seg.data[part.data == 1].any():
             #     logger.warning(f"{subject_bids}: Segmentation {seg_path_in} overlaps with previous segmentations.")
 
-            seg.data[part.data == 1] = i
+            # seg.data[part.data == 1] = i
 
         # Save the combined segmentation
-        seg.save(seg_path_out)
+        # seg.save(seg_path_out)
         processed_segs += 1
         logger.info(f'Saved: {seg_path_out}')
 
