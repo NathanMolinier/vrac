@@ -64,7 +64,7 @@ def create_participants_tsv(file_metadata, participants, path_output):
             manufacturer = metadata_dict[item[1]]['manufacturer'] if metadata_dict[item[1]]['manufacturer'] else 'n/a'
             scanner_model = metadata_dict[item[1]]['scanner_model'] if metadata_dict[item[1]]['scanner_model'] else 'n/a'
             split = metadata_dict[item[1]]['split'] if metadata_dict[item[1]]['split'] else 'n/a'
-            known_data = ['homo sapiens', age, sex, manufacturer, scanner_model, institution, pathology, notes, split]
+            known_data = ['homo sapiens', age if age else 'n/a', sex if sex else 'n/a', manufacturer if manufacturer else 'n/a', scanner_model if scanner_model else 'n/a', institution if institution else 'n/a', pathology if pathology else 'n/a', notes if notes else 'n/a', split if split else 'n/a']
             tsv_writer.writerow(list(item) + known_data)
         logger.info(f'participants.tsv created in {path_output}')
 
