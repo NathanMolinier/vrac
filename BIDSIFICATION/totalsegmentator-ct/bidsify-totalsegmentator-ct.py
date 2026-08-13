@@ -43,7 +43,7 @@ def write_json(path_output, json_filename, data_json):
 
 
 def create_participants_tsv(file_metadata, participants, path_output):
-    with open(file_metadata, 'r', encoding='utf-8-sig') as f:
+    with open(file_metadata, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         metadata_dict = {row['image_id']: row for row in reader}
 
