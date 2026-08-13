@@ -49,12 +49,12 @@ def create_participants_tsv(file_metadata, participants, path_output):
 
     with open(os.path.join(path_output, 'participants.tsv'), 'w') as tsv_file:
         tsv_writer = csv.writer(tsv_file, delimiter='\t', lineterminator='\n')
-        tsv_writer.writerow(['participant_id', 'source_id', 'species', 'age', 'sex', 'manufacturer', 'scanner_model', 'institution', 'pathology', 'notes', 'split'])
+        tsv_writer.writerow(['participant_id', 'source_id', 'species', 'age', 'sex', 'manufacturer', 'scanner_model', 'slice_thickness', 'scanning_sequence', 'repetition_time', 'echo_time', 'magnetic_field_strength', 'institute', 'study_type', 'split'])
         for item in sorted(participants, key=lambda a: a[0]):
             age = int(metadata_dict[item[1]]['age']) if metadata_dict[item[1]]['age'].isdigit() else 'n/a'
             sex = metadata_dict[item[1]]['gender'].upper() if metadata_dict[item[1]]['gender'] in ['f', 'm'] else 'n/a'
             known_data = ['homo sapiens', age if age else 'n/a', sex if sex else 'n/a']
-            for field in ["manufacturer", "scanner_model", "slice_thickness", "scanning_sequence", "repetition_time", "echo_time", "magnetic_field_strength", "institution", "study_type", "split"]:
+            for field in ["manufacturer", "scanner_model", "slice_thickness", "scanning_sequence", "repetition_time", "echo_time", "magnetic_field_strength", "institute", "study_type", "split"]:
                 metadata = metadata_dict[item[1]][field] if metadata_dict[item[1]][field] else 'n/a'
                 known_data.append(metadata)
             tsv_writer.writerow(list(item) + known_data)
@@ -75,7 +75,7 @@ def create_participants_json(path_output):
         "repetition_time": {"Description": "Repetition time of the participant's imaging", "LongName": "Repetition Time", "Units": "ms"},
         "echo_time": {"Description": "Echo time of the participant's imaging", "LongName": "Echo Time", "Units": "ms"},
         "magnetic_field_strength": {"Description": "Magnetic field strength of the participant's imaging", "LongName": "Magnetic Field Strength", "Units": "T"},
-        "institution": {"Description": "Human-friendly institution name", "LongName": "BIDS Institution ID"},
+        "institute": {"Description": "Human-friendly institute name", "LongName": "BIDS institute ID"},
         "study_type": {"Description": "Scanned region", "LongName": "Study Type"},
         "split": {"Description": "Dataset split containing this image for TotalSegmentator-MRI training", "LongName": "Dataset Split", "Levels": {"train": "Training Set", "val": "Validation Set", "test": "Test Set"}}
     }
