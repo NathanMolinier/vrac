@@ -90,7 +90,8 @@ def create_dataset_description(path_output):
     data_json = {
         "BIDSVersion": "1.9.0",
         "Name": "fullbody-totalsegmentator-ct",
-        "DatasetType": "raw"
+        "DatasetType": "raw",
+        "Authors": ["Nathan Molinier"]
     }
     create_folder(path_output)
     write_json(path_output, 'dataset_description.json', data_json)
