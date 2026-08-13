@@ -155,9 +155,8 @@ def main():
         device=device,
         use_torch_compile=False,
         verbose=True,
-        torch_n_threads=8,  # Adjust based on your CPU
+        torch_n_threads=os.cpu_count(),  # Adjust based on your CPU
         do_autozoom=True,
-        use_pinned_memory=True,
     )
 
     # Load the model
