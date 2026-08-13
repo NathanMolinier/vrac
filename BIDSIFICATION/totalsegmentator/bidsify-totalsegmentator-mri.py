@@ -44,27 +44,19 @@ def write_json(path_output, json_filename, data_json):
 
 def create_participants_tsv(file_metadata, participants, path_output):
     with open(file_metadata, 'r', encoding='utf-8-sig') as f:
-        reader = csv.DictReader(f)
+        reader = csv.DictReader(f, delimiter=';')
         metadata_dict = {row['image_id']: row for row in reader}
 
     with open(os.path.join(path_output, 'participants.tsv'), 'w') as tsv_file:
         tsv_writer = csv.writer(tsv_file, delimiter='\t', lineterminator='\n')
         tsv_writer.writerow(['participant_id', 'source_id', 'species', 'age', 'sex', 'manufacturer', 'scanner_model', 'institution', 'pathology', 'notes', 'split'])
         for item in sorted(participants, key=lambda a: a[0]):
-            age = metadata_dict[item[1]]['age'] if metadata_dict[item[1]]['age'].isdigit() else 'n/a'
+            age = int(metadata_dict[item[1]]['age']) if metadata_dict[item[1]]['age'].isdigit() else 'n/a'
             sex = metadata_dict[item[1]]['gender'].upper() if metadata_dict[item[1]]['gender'] in ['f', 'm'] else 'n/a'
-            if metadata_dict[item[1]]['pathology'] in ['unclear', 'other']:
-                pathology = 'unclear'
-            elif metadata_dict[item[1]]['pathology'] in ['no_pathology']:
-                pathology = 'healthy control'
-            else:
-                pathology = metadata_dict[item[1]]['pathology'] if metadata_dict[item[1]]['pathology'] else 'n/a'
-            notes = metadata_dict[item[1]]['pathology_location'] if pathology not in ['healthy control', ''] else 'n/a'
-            institution = metadata_dict[item[1]]['institute'] if metadata_dict[item[1]]['institute'] else 'n/a'
-            manufacturer = metadata_dict[item[1]]['manufacturer'] if metadata_dict[item[1]]['manufacturer'] else 'n/a'
-            scanner_model = metadata_dict[item[1]]['scanner_model'] if metadata_dict[item[1]]['scanner_model'] else 'n/a'
-            split = metadata_dict[item[1]]['split'] if metadata_dict[item[1]]['split'] else 'n/a'
-            known_data = ['homo sapiens', age if age else 'n/a', sex if sex else 'n/a', manufacturer if manufacturer else 'n/a', scanner_model if scanner_model else 'n/a', institution if institution else 'n/a', pathology if pathology else 'n/a', notes if notes else 'n/a', split if split else 'n/a']
+            known_data = ['homo sapiens', age if age else 'n/a', sex if sex else 'n/a']
+            for field in ["manufacturer", "scanner_model", "slice_thickness", "scanning_sequence", "repetition_time", "echo_time", "magnetic_field_strength", "institution", "study_type", "split"]:
+                metadata = metadata_dict[item[1]][field] if metadata_dict[item[1]][field] else 'n/a'
+                known_data.append(metadata)
             tsv_writer.writerow(list(item) + known_data)
         logger.info(f'participants.tsv created in {path_output}')
 
@@ -78,10 +70,14 @@ def create_participants_json(path_output):
         "sex": {"Description": "sex of the participant as reported by the participant", "Levels": {"M": "male", "F": "female", "O": "other"}},
         "manufacturer": {"Description": "Manufacturer of the participant's imaging equipment", "LongName": "Manufacturer"},
         "scanner_model": {"Description": "Model of the participant's imaging equipment", "LongName": "Scanner Model"},
+        "slice_thickness": {"Description": "Slice thickness of the participant's imaging", "LongName": "Slice Thickness", "Units": "mm"},
+        "scanning_sequence": {"Description": "Scanning sequence of the participant's imaging", "LongName": "Scanning Sequence"},
+        "repetition_time": {"Description": "Repetition time of the participant's imaging", "LongName": "Repetition Time", "Units": "ms"},
+        "echo_time": {"Description": "Echo time of the participant's imaging", "LongName": "Echo Time", "Units": "ms"},
+        "magnetic_field_strength": {"Description": "Magnetic field strength of the participant's imaging", "LongName": "Magnetic Field Strength", "Units": "T"},
         "institution": {"Description": "Human-friendly institution name", "LongName": "BIDS Institution ID"},
-        "pathology": {"Description": "The diagnosis of pathology of the participant", "LongName": "Pathology name"},
-        "notes": {"Description": "Additional notes about the participant", "LongName": "Additional notes"},
-        "split": {"Description": "Dataset split containing this image for TotalSegmentator-CT training", "LongName": "Dataset Split", "Levels": {"train": "Training Set", "val": "Validation Set", "test": "Test Set"}}
+        "study_type": {"Description": "Scanned region", "LongName": "Study Type"},
+        "split": {"Description": "Dataset split containing this image for TotalSegmentator-MRI training", "LongName": "Dataset Split", "Levels": {"train": "Training Set", "val": "Validation Set", "test": "Test Set"}}
     }
     write_json(path_output, 'participants.json', data_json)
 
@@ -89,7 +85,7 @@ def create_participants_json(path_output):
 def create_dataset_description(path_output):
     data_json = {
         "BIDSVersion": "1.9.0",
-        "Name": "fullbody-totalsegmentator-ct",
+        "Name": "fullbody-totalsegmentator-mri",
         "DatasetType": "raw",
         "Authors": ["Nathan Molinier"]
     }
