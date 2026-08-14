@@ -87,7 +87,7 @@ def refine_segmentation(session, img_path, seg_path, output_path):
     for l in labels:
         print(f"Refining segmentation for label {l}...")
         # Set target buffer to zero
-        results = refine_segmentation_single(session, seg_data, l, 0, 1, lasso=False)
+        results = refine_segmentation_single(session, seg_data, l, 0, 1, lasso=True)
         if results is not None:
             out_img.data[results == 1] = l
 
