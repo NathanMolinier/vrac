@@ -129,7 +129,7 @@ def main():
     img_path = args.image
     seg_path = args.seg
     output_path = args.out
-    exclude_labels = args.exclude_labels
+    exclude_labels = [int(x) for x in args.exclude_labels]
 
     # Define constants
     REPO_ID = "nnInteractive/nnInteractive"
