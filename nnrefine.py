@@ -21,10 +21,10 @@ def refine_segmentation_single(session, seg_data, seg_label, seg_label_neg, iter
     if not np.any(scribble):
         return None
     
-    # Dilate
-    size = 1
-    footprint = ball(size)
-    scribble = dilation(scribble, footprint)
+    # # Dilate
+    # size = 1
+    # footprint = ball(size)
+    # scribble = dilation(scribble, footprint)
 
     # Add scribble interaction
     print("Adding scribble interaction...")
