@@ -55,7 +55,8 @@ def refine_segmentation_single(session, seg_data, seg_label, seg_label_neg, iter
     return results
 
 
-def refine_segmentation(session, img_path, seg_path, output_path):
+
+def refine_segmentation(session, img_path, seg_path, output_path, exclude_labels):
     ###############################################
     # Load input data
     ###############################################
@@ -84,6 +85,7 @@ def refine_segmentation(session, img_path, seg_path, output_path):
 
     # for all unique labels in the segmentation
     labels = [int(x) for x in np.unique(seg_data) if x != 0]
+    labels = [l for l in labels if l not in exclude_labels]
     for l in labels:
         print(f"Refining segmentation for label {l}...")
         # Set target buffer to zero
@@ -112,6 +114,7 @@ def get_parser():
     parser.add_argument('--image', '-i', required=True, help='Path to the input image (Required)')
     parser.add_argument('--seg', '-s', required=True, help='Path to the input segmentation (Required)')
     parser.add_argument('--out', '-o', required=True, help='Path of the output folder (Required)')
+    parser.add_argument('--exclude-labels', '-e', required=True, help='Labels to exclude from refinement (Required)')
     return parser
 
 
@@ -124,6 +127,7 @@ def main():
     img_path = args.image
     seg_path = args.seg
     output_path = args.out
+    exclude_labels = args.exclude_labels
 
     # Define constants
     REPO_ID = "nnInteractive/nnInteractive"
@@ -165,7 +169,7 @@ def main():
     print(f"Loading model from {model_path}")
     session.initialize_from_trained_model_folder(str(model_path))
 
-    refine_segmentation(session, img_path, seg_path, output_path)
+    refine_segmentation(session, img_path, seg_path, output_path, exclude_labels)
 
 if __name__=='__main__':
     main()
