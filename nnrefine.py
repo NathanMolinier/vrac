@@ -85,11 +85,13 @@ def refine_segmentation(session, img_path, seg_path, output_path, exclude_labels
 
     # for all unique labels in the segmentation
     labels = [int(x) for x in np.unique(seg_data) if x != 0]
-    labels = [l for l in labels if l not in exclude_labels]
     for l in labels:
-        print(f"Refining segmentation for label {l}...")
-        # Set target buffer to zero
-        results = refine_segmentation_single(session, seg_data, l, 0, 1, lasso=True)
+        if not l in exclude_labels:
+            print(f"Refining segmentation for label {l}...")
+            # Set target buffer to zero
+            results = refine_segmentation_single(session, seg_data, l, 0, 1, lasso=True)
+        else:
+            results = (seg_data == l).astype(np.int8)
         if results is not None:
             out_img.data[results == 1] = l
 
