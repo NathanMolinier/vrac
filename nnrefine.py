@@ -114,7 +114,7 @@ def get_parser():
     parser.add_argument('--image', '-i', required=True, help='Path to the input image (Required)')
     parser.add_argument('--seg', '-s', required=True, help='Path to the input segmentation (Required)')
     parser.add_argument('--out', '-o', required=True, help='Path of the output folder (Required)')
-    parser.add_argument('--exclude-labels', '-e', required=True, help='Labels to exclude from refinement (Required)')
+    parser.add_argument('--exclude-labels', '-e', required=False, default=[], nargs='+', help='Labels to exclude from refinement (Required)')
     return parser
 
 
