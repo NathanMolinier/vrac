@@ -22,9 +22,9 @@ def refine_segmentation_single(session, seg_data, seg_label, seg_label_neg, iter
         return None
     
     # Dilate
-    # size = 1
-    # footprint = ball(size)
-    # scribble = dilation(scribble, footprint)
+    size = 1
+    footprint = ball(size)
+    scribble = dilation(scribble, footprint)
 
     # Add scribble interaction
     print("Adding scribble interaction...")
@@ -163,7 +163,7 @@ def main():
         use_torch_compile=False,
         verbose=True,
         torch_n_threads=os.cpu_count(),  # Adjust based on your CPU
-        do_autozoom=True,
+        do_autozoom=False,
     )
 
     # Load the model
