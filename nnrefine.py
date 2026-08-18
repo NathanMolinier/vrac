@@ -22,7 +22,7 @@ def refine_segmentation_single(session, seg_data, seg_label, seg_label_neg, iter
         return None
     
     # Dilate
-    size = 1
+    size = 2
     footprint = ball(size)
     scribble = dilation(scribble, footprint)
 
