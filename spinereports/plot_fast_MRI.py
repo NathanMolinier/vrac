@@ -108,6 +108,8 @@ def _plot_metric(
 	group_col = _choose_group_col(df)
 	fig, ax = plt.subplots(figsize=(7.5, 4.2))
 
+	measure_points = sorted(df["measure_point"].dropna().unique().tolist())
+
 	if group_col is None:
 		agg = df.groupby("measure_point", as_index=False)[metric].agg(aggregate)
 		agg = agg.sort_values("measure_point")
@@ -142,6 +144,9 @@ def _plot_metric(
 	ax.set_title(f"{structure_name} - {metric}")
 	ax.set_xlabel("Measure point")
 	ax.set_ylabel(metric)
+	if measure_points:
+		ax.set_xticks(measure_points)
+		ax.set_xticklabels([str(int(m)) for m in measure_points])
 	ax.grid(True, alpha=0.25)
 
 	structure_stem = _safe_name(structure_name.replace("_subject.csv", ""))
@@ -241,15 +246,18 @@ def build_argparser() -> argparse.ArgumentParser:
 def main() -> None:
 	args = build_argparser().parse_args()
 	input_dir = args.input_dir
+	outdir = args.outdir or (input_dir / "plots_fast_MRI")
+	aggregate = args.aggregate
+	max_groups = args.max_groups
+
 	if not input_dir.exists():
 		raise SystemExit(f"Input folder not found: {input_dir}")
 
-	outdir = args.outdir or (input_dir / "plots_fast_MRI")
 	counts = generate_plots(
 		input_dir,
 		outdir,
-		aggregate=args.aggregate,
-		max_groups=max(1, int(args.max_groups)),
+		aggregate=aggregate,
+		max_groups=max(1, int(max_groups)),
 	)
 
 	total = int(sum(counts.values()))
