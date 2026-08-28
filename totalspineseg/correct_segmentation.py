@@ -2,7 +2,7 @@
 Correct a TotalSpineSeg segmentation:
   - Remap L6 vertebra to sacrum and L5-L6 disc to L5-S when they were
     wrongly identified.
-  - Optionally shift every disc and vertebra label by one anatomical
+  - Shift every disc and vertebra label by one anatomical
     level toward the sacrum when the model mislabeled a sacrum disc as
     L5-S (the current L4-L5 becomes L5-S, L3-L4 becomes L4-L5, ...).
 """
