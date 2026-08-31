@@ -89,7 +89,7 @@ def refine_segmentation(session, img_path, seg_path, output_path, exclude_labels
         if not l in exclude_labels:
             print(f"Refining segmentation for label {l}...")
             # Set target buffer to zero
-            results = refine_segmentation_single(session, seg_data, l, 0, 1, lasso=True)
+            results = refine_segmentation_single(session, seg_data, l, 0, 1, lasso=False)
         else:
             results = (seg_data == l).astype(np.int8)
         if results is not None:
@@ -163,7 +163,7 @@ def main():
         use_torch_compile=False,
         verbose=True,
         torch_n_threads=os.cpu_count(),  # Adjust based on your CPU
-        do_autozoom=False,
+        do_autozoom=True,
     )
 
     # Load the model
