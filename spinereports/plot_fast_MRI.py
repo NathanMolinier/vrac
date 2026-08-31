@@ -39,11 +39,12 @@ def _safe_name(value: str) -> str:
 
 
 def _extract_measure_point(folder_name: str) -> Optional[int]:
-	match = re.search(r"meas(\d+)", folder_name, flags=re.IGNORECASE)
+	match = re.search(r"meas(\d+)|(\d+)meas", folder_name, flags=re.IGNORECASE)
 	if not match:
 		return None
+	digits = match.group(1) or match.group(2)
 	try:
-		return int(match.group(1))
+		return int(digits)
 	except ValueError:
 		return None
 
