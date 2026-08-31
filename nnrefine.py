@@ -163,7 +163,7 @@ def main():
         use_torch_compile=False,
         verbose=True,
         torch_n_threads=os.cpu_count(),  # Adjust based on your CPU
-        do_autozoom=True,
+        do_autozoom=False,
     )
 
     # Load the model
