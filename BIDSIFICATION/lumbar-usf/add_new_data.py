@@ -109,7 +109,12 @@ def main():
 
     # Print current time and date to log file
     logger.info('\nAnalysis started at {}'.format(datetime.datetime.now()))
-    
+
+    # Load participant.tsv
+    with open(os.path.join(path_output, 'participants.tsv'), 'r') as tsv_file:
+        tsv_reader = csv.DictReader(tsv_file, delimiter='\t')
+        existing_tsv = {row['participant_id']: row['source_id'] for row in tsv_reader}
+
     # Initialize dict for participants.tsv
     sub_dict_tsv = dict()
     for file in os.listdir(path_dataset):
@@ -122,7 +127,7 @@ def main():
             subject_name_bids = bids_filename.split('_')[0]
             
             # Add subject name to participant.tsv 
-            if subject_name_bids not in sub_dict_tsv.keys(): # Add only one time each subject into the participant.csv
+            if subject_name_bids not in existing_tsv.keys(): # Add only one time each subject into the participant.csv
                 # Aggregate subjects for participants.tsv
                 sub_dict_tsv[subject_name_bids] = old_name
 
