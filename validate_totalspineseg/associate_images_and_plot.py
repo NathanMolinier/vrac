@@ -54,9 +54,9 @@ def title2image(title, width, height):
     return title
 
 def main():
-    jpeg_folder = ['/Users/nathan/Desktop/preview/loc', '/Users/nathan/Desktop/preview/raw', '/Users/nathan/Desktop/preview/raw_loc']
+    jpeg_folder = ['/Users/nathan/Desktop/preview_loc/preview/loc', '/Users/nathan/Desktop/preview_loc/preview/raw', '/Users/nathan/Desktop/preview_loc/preview/raw_loc']
     titles = ['A', 'B', 'C']
-    sub_string = ''
+    sub_string = 'T2w'
 
     col_list = []
     line_list = []
@@ -66,8 +66,8 @@ def main():
 
     # Extract optimal number of line and column
     power = np.ceil(np.log(len(jpeg_list))/np.log(2))
-    nb_line = round(2**(power//2))
-    nb_col = round(2**(power - power//2))
+    nb_line = 1#round(2**(power//2))
+    nb_col = 3#round(2**(power - power//2))
     assert nb_col*nb_line >= len(jpeg_list)
     
     # Extract shape
@@ -110,7 +110,7 @@ def main():
             title_contrast = title2image(title=contrast, width=im.shape[1], height=txt_height)
 
             # Concat title with images
-            im = np.concatenate((im, title_contrast), axis=0)
+            # im = np.concatenate((im, title_contrast), axis=0)
             
             # Add padding to the side to distinguish images
             im = np.pad(im, pad_width=((10,10),(10,10),(0,0)), mode='constant')

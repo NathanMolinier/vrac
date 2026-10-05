@@ -2,8 +2,8 @@ import csv
 import glob
 
 def main():
-    csv_path = '/Users/nathan/data/fullbody-totalsegmentator-ct/participants.tsv'
-    dataset_path = '/Users/nathan/data/fullbody-totalsegmentator-ct'
+    csv_path = '/Users/nathan/data/fullbody-totalsegmentator-mri/participants.tsv'
+    dataset_path = '/Users/nathan/data/fullbody-totalsegmentator-mri'
 
     # Read CSV file
     participants_dict = {}
@@ -15,7 +15,7 @@ def main():
     # Add patients to split lists
     train, val, test = [], [], []
     for participant_id, row in participants_dict.items():
-        image_path = f"{dataset_path}/derivatives/labels/{participant_id}/anat/{participant_id}_CT_label-body_dseg.nii.gz"
+        image_path = f"{dataset_path}/derivatives/labels/{participant_id}/anat/{participant_id}_MR_label-body_dseg.nii.gz"
         if row['split'] == 'train':
             train.append(image_path)
         elif row['split'] == 'val':

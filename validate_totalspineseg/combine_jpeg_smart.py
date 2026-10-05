@@ -57,8 +57,8 @@ def title2image(title, width, height):
 
 
 def main():
-    jpeg_folder = '/Users/nathan/Desktop/preview'
-    sub_string = ''
+    jpeg_folder = '/Users/nathan/Desktop/preview_new'
+    sub_string = '_step2_output_tags'
     sub_string_img = '_input'
 
     title_height = 60

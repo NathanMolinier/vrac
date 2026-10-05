@@ -6,13 +6,11 @@ import logging
 from typing import Optional, Sequence
 
 import numpy as np
-from scipy.ndimage import center_of_mass
 
-from spinalcordtoolbox.centerline.core import get_centerline, ParamCenterline
 from spinalcordtoolbox.resampling import resample_nib
 from spinalcordtoolbox.image import Image
 from spinalcordtoolbox.utils.sys import __version__, LazyLoader, list2cmdline
-from spinalcordtoolbox.reports.qc2 import inf_nan_fill, equalize_histogram, add_orientation_labels, assign_label_colors_by_groups, plot_outlines, add_segmentation_labels, create_qc_entry
+from spinalcordtoolbox.reports.qc2 import equalize_histogram, add_orientation_labels, assign_label_colors_by_groups, plot_outlines, add_segmentation_labels, create_qc_entry
 
 pd = LazyLoader("pd", globals(), "pandas")
 mpl_plt = LazyLoader("mpl_plt", globals(), "matplotlib.pyplot")

@@ -6,8 +6,8 @@ import numpy as np
 from progress.bar import Bar
 from vrac.utils.utils import normalize
 
-path_to_BIDS = '/Users/nathan/data/rootlets-ulrike/hc-leipzig-7t-mp2rage'
-contrast = ''
+path_to_BIDS = '/Users/nathan/data/sct-testing-large'
+contrast = 'T2w'
 output_folder_path = os.path.join(path_to_BIDS, 'derivatives/preview')
 
 # Fetch all the niftii files in the BIDS folder
