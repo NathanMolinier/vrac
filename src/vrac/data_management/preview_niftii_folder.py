@@ -23,12 +23,30 @@ def get_parser():
     parser.add_argument('--format', '-f', default='png', choices=['png', 'jpg'], help='Output image format. Default: png.')
     parser.add_argument('--jobs', '-j', default=0, type=int, help='Number of worker processes. 0 (default) uses all available CPUs.')
     parser.add_argument('--percentile', '-p', default=95.0, type=float, help='Intensity percentile used for clipping before normalization. Default: 95.0.')
+    parser.add_argument('--exclude', '-x', nargs='+', default=[], help='Folders to exclude. Each entry matches either a directory name anywhere in the tree (e.g. "derivatives") or an absolute/relative path to a specific folder.')
     return parser
 
 
-def _find_nii_gz(root):
+def _normalize_excludes(excludes, input_root):
+    names = set()
+    paths = set()
+    for e in excludes:
+        if os.sep in e or (os.altsep and os.altsep in e):
+            abs_e = e if os.path.isabs(e) else os.path.abspath(os.path.join(input_root, e))
+            paths.add(os.path.normpath(abs_e))
+        else:
+            names.add(e)
+    return names, paths
+
+
+def _find_nii_gz(root, exclude_names, exclude_paths):
     hits = []
-    for dirpath, _, filenames in os.walk(root):
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [
+            d for d in dirnames
+            if d not in exclude_names
+            and os.path.normpath(os.path.join(dirpath, d)) not in exclude_paths
+        ]
         for name in filenames:
             if name.endswith('.nii.gz'):
                 hits.append(os.path.join(dirpath, name))
@@ -87,7 +105,8 @@ def main():
 
     os.makedirs(output_folder, exist_ok=True)
 
-    nii_files = _find_nii_gz(input_root)
+    exclude_names, exclude_paths = _normalize_excludes(args.exclude, input_root)
+    nii_files = _find_nii_gz(input_root, exclude_names, exclude_paths)
     if not nii_files:
         print(f'No .nii.gz files found under {input_root}')
         return
