@@ -38,6 +38,12 @@ def _safe_name(value: str) -> str:
 	return value.strip("_")
 
 
+def _smooth(values: pd.Series, window: int) -> pd.Series:
+	if window is None or window <= 1 or values.empty:
+		return values
+	return values.rolling(window=window, center=True, min_periods=1).mean()
+
+
 def _extract_measure_point(folder_name: str) -> Optional[int]:
 	match = re.search(r"meas(\d+)|(\d+)meas", folder_name, flags=re.IGNORECASE)
 	if not match:
@@ -126,6 +132,7 @@ def _plot_slice_metric(
 	structure_name: str,
 	metric: str,
 	outdir: Path,
+	smooth_window: int,
 ) -> int:
 	"""x=slice_interp, one line per measure_point, vertebra_level as vertical dividers.
 
@@ -168,6 +175,14 @@ def _plot_slice_metric(
 		cmap = plt.get_cmap("viridis", max(len(measure_points), 1))
 		mp_to_color = {mp: cmap(i) for i, mp in enumerate(measure_points)}
 
+		# Smooth each measure_point's trajectory before plotting.
+		sub = sub.copy()
+		sub["_smoothed"] = (
+			sub.sort_values("slice_interp")
+			.groupby("measure_point", sort=False)[metric]
+			.transform(lambda s: _smooth(s, smooth_window))
+		)
+
 		fig, ax = plt.subplots(figsize=(10.0, 5.0))
 		for mp in measure_points:
 			row = sub[sub["measure_point"] == mp].sort_values("slice_interp")
@@ -175,7 +190,7 @@ def _plot_slice_metric(
 				continue
 			ax.plot(
 				row["slice_interp"],
-				row[metric],
+				row["_smoothed"],
 				marker=".",
 				markersize=3,
 				linewidth=1.0,
@@ -184,10 +199,9 @@ def _plot_slice_metric(
 				label=str(int(mp)),
 			)
 
-		# Vertebra_level regions: draw a vertical divider at each boundary and
-		# label each region at the top of the plot.
+		# Compute vertebra_level boundaries once (shared between figures).
+		boundaries: List[Tuple[float, float, str]] = []
 		if vlevel_col is not None:
-			boundaries: List[Tuple[float, float, str]] = []  # (start_slice, end_slice, level)
 			run_level: Optional[str] = None
 			run_start: Optional[float] = None
 			prev_slice: Optional[float] = None
@@ -202,17 +216,19 @@ def _plot_slice_metric(
 			if run_level is not None and run_start is not None and prev_slice is not None:
 				boundaries.append((run_start, prev_slice, run_level))
 
+		def _draw_vlevels(target_ax) -> None:
+			if not boundaries:
+				return
 			for i, (start, _end, _lvl) in enumerate(boundaries):
 				if i == 0:
 					continue
-				ax.axvline(start - 0.5, color="0.4", linewidth=0.8, linestyle="--", alpha=0.7)
-
-			ymin, ymax = ax.get_ylim()
+				target_ax.axvline(start - 0.5, color="0.4", linewidth=0.8, linestyle="--", alpha=0.7)
+			ymin, ymax = target_ax.get_ylim()
 			y_text = ymax - (ymax - ymin) * 0.03
 			for start, end, lvl in boundaries:
 				if lvl is None:
 					continue
-				ax.text(
+				target_ax.text(
 					(start + end) / 2.0,
 					y_text,
 					str(lvl),
@@ -221,6 +237,8 @@ def _plot_slice_metric(
 					fontsize=8,
 					color="0.25",
 				)
+
+		_draw_vlevels(ax)
 
 		ax.legend(
 			loc="center left",
@@ -234,13 +252,40 @@ def _plot_slice_metric(
 		title = f"{structure_name} - {metric}"
 		if label is not None:
 			title += f" ({label})"
-		ax.set_title(title)
+		ax.set_title(title + f" (smoothed, w={smooth_window})")
 		ax.set_xlabel("Slice (slice_interp)")
 		ax.set_ylabel(metric)
 		ax.grid(True, alpha=0.25)
 
 		_save_fig(fig, outdir, structure_name, metric, suffix=label or "")
 		count += 1
+
+		# Companion figure: std across measure_points at each slice.
+		if len(measure_points) >= 2:
+			agg = (
+				sub.groupby("slice_interp")["_smoothed"]
+				.agg(["mean", "std", "count"])
+				.reset_index()
+				.sort_values("slice_interp")
+			)
+			if agg["std"].notna().any():
+				fig_std, ax_std = plt.subplots(figsize=(10.0, 5.0))
+				n_max = int(agg["count"].max() or 0)
+				ax_std.plot(
+					agg["slice_interp"],
+					agg["std"],
+					linewidth=1.6,
+					color="#444444",
+					label=f"std (n={n_max})",
+				)
+				_draw_vlevels(ax_std)
+				ax_std.legend(loc="best", fontsize=8, frameon=False)
+				ax_std.set_title(title + " - std across measure_points")
+				ax_std.set_xlabel("Slice (slice_interp)")
+				ax_std.set_ylabel(f"std({metric})")
+				ax_std.grid(True, alpha=0.25)
+				_save_fig(fig_std, outdir, structure_name, metric, suffix=(label or "") + "_std")
+				count += 1
 
 	return count
 
@@ -308,6 +353,7 @@ def _plot_metric(
 	outdir: Path,
 	aggregate: str,
 	max_groups: int,
+	smooth_window: int,
 ) -> int:
 	if _is_slice_data(df):
 		return _plot_slice_metric(
@@ -315,6 +361,7 @@ def _plot_metric(
 			structure_name=structure_name,
 			metric=metric,
 			outdir=outdir,
+			smooth_window=smooth_window,
 		)
 	return _plot_aggregate_metric(
 		df,
@@ -332,6 +379,7 @@ def generate_plots(
 	*,
 	aggregate: str,
 	max_groups: int,
+	smooth_window: int,
 ) -> Dict[str, int]:
 	measure_dirs = _find_measure_dirs(root_dir)
 	if not measure_dirs:
@@ -371,6 +419,7 @@ def generate_plots(
 				outdir=outdir,
 				aggregate=aggregate,
 				max_groups=max_groups,
+				smooth_window=smooth_window,
 			)
 
 		plot_count_by_structure[structure_csv_name] = count
@@ -408,6 +457,15 @@ def build_argparser() -> argparse.ArgumentParser:
 		default=10,
 		help="Maximum number of group curves to plot when a grouping column exists.",
 	)
+	parser.add_argument(
+		"--smooth-window",
+		type=int,
+		default=5,
+		help=(
+			"Rolling-window size (in slices) used to smooth metrics along "
+			"slice_interp before plotting (default 5). Set to 1 to disable."
+		),
+	)
 	return parser
 
 
@@ -417,6 +475,7 @@ def main() -> None:
 	outdir = args.outdir or (input_dir / "plots_fast_MRI")
 	aggregate = args.aggregate
 	max_groups = args.max_groups
+	smooth_window = max(1, int(args.smooth_window))
 
 	if not input_dir.exists():
 		raise SystemExit(f"Input folder not found: {input_dir}")
@@ -426,6 +485,7 @@ def main() -> None:
 		outdir,
 		aggregate=aggregate,
 		max_groups=max(1, int(max_groups)),
+		smooth_window=smooth_window,
 	)
 
 	total = int(sum(counts.values()))
