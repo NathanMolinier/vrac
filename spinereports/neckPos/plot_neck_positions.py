@@ -58,6 +58,19 @@ def _safe_name(value: str) -> str:
 	return value.strip("_")
 
 
+def _smooth(values: pd.Series, window: int) -> pd.Series:
+	if window is None or window <= 1 or values.empty:
+		return values
+	return values.rolling(window=window, center=True, min_periods=1).mean()
+
+
+def _rolling_std(values: pd.Series, window: int) -> pd.Series:
+	if values.empty:
+		return values
+	w = max(int(window) if window else 1, 2)
+	return values.rolling(window=w, center=True, min_periods=2).std()
+
+
 def _parse_subject_position(folder_name: str) -> Optional[Tuple[str, str]]:
 	sub_match = SUBJECT_RE.search(folder_name)
 	pos_match = SESSION_RE.search(folder_name)
@@ -218,6 +231,7 @@ def _plot_subject_slice_metric(
 	structure_name: str,
 	metric: str,
 	outdir: Path,
+	smooth_window: int,
 ) -> int:
 	count = 0
 	for label, sub in _partitions_by_structure(sub_df):
@@ -239,13 +253,16 @@ def _plot_subject_slice_metric(
 			continue
 
 		fig, ax = plt.subplots(figsize=(10.0, 5.0))
+		fig_std, ax_std = plt.subplots(figsize=(10.0, 5.0))
+		have_std = False
 		for pos in positions:
 			row = sub[sub["position"] == pos].sort_values("slice_interp")
 			if row.empty:
 				continue
+			smoothed = _smooth(row[metric], smooth_window)
 			ax.plot(
 				row["slice_interp"],
-				row[metric],
+				smoothed,
 				marker=".",
 				markersize=3,
 				linewidth=1.2,
@@ -253,16 +270,29 @@ def _plot_subject_slice_metric(
 				color=_position_color(pos),
 				label=pos,
 			)
+			rolling_std = _rolling_std(row[metric], smooth_window)
+			if rolling_std.notna().any():
+				ax_std.plot(
+					row["slice_interp"],
+					rolling_std,
+					linewidth=1.2,
+					alpha=0.9,
+					color=_position_color(pos),
+					label=pos,
+				)
+				have_std = True
 
 		if vlevel_col is not None:
 			boundaries = _vertebra_boundaries(slices, slice_to_vlevel)
 			_draw_vertebra_dividers(ax, boundaries)
+			if have_std:
+				_draw_vertebra_dividers(ax_std, boundaries)
 
 		ax.legend(loc="best", fontsize=8, frameon=False, title="Position")
 		title = f"{subject} - {structure_name} - {metric}"
 		if label is not None:
 			title += f" ({label})"
-		ax.set_title(title)
+		ax.set_title(title + f" (smoothed, w={smooth_window})")
 		ax.set_xlabel("Slice (slice_interp)")
 		ax.set_ylabel(metric)
 		ax.grid(True, alpha=0.25)
@@ -272,6 +302,18 @@ def _plot_subject_slice_metric(
 		fig_path = outdir / f"{struct_stem}__{_safe_name(metric)}{suffix}.png"
 		_save_fig(fig, fig_path)
 		count += 1
+
+		if have_std:
+			ax_std.legend(loc="best", fontsize=8, frameon=False, title="Position")
+			ax_std.set_title(title + f" - rolling std (w={smooth_window})")
+			ax_std.set_xlabel("Slice (slice_interp)")
+			ax_std.set_ylabel(f"std({metric})")
+			ax_std.grid(True, alpha=0.25)
+			std_path = outdir / f"{struct_stem}__{_safe_name(metric)}{suffix}__std.png"
+			_save_fig(fig_std, std_path)
+			count += 1
+		else:
+			plt.close(fig_std)
 	return count
 
 
@@ -357,6 +399,7 @@ def _plot_subject_metric(
 	structure_name: str,
 	metric: str,
 	outdir: Path,
+	smooth_window: int,
 ) -> int:
 	if _is_slice_data(sub_df):
 		return _plot_subject_slice_metric(
@@ -365,6 +408,7 @@ def _plot_subject_metric(
 			structure_name=structure_name,
 			metric=metric,
 			outdir=outdir,
+			smooth_window=smooth_window,
 		)
 	return _plot_subject_grouped_metric(
 		subject,
@@ -387,6 +431,7 @@ def _plot_cross_subject_slice_metric(
 	metric: str,
 	outdir: Path,
 	max_subjects: int,
+	smooth_window: int,
 ) -> int:
 	"""x=slice_interp, mean +/- std across subjects, one band per position."""
 	count = 0
@@ -408,25 +453,37 @@ def _plot_cross_subject_slice_metric(
 			_slice_to_vlevel_map(sub, slices_all, vlevel_col) if vlevel_col else {}
 		)
 
-		# One figure: summary (mean +/- std across subjects) per position.
+		# Smooth each (subject, position) trajectory before aggregating.
+		sub = sub.copy()
+		sub["_smoothed"] = (
+			sub.sort_values("slice_interp")
+			.groupby(["subject", "position"], sort=False)[metric]
+			.transform(lambda s: _smooth(s, smooth_window))
+		)
+
+		# One figure: smoothed mean +/- std across subjects per position.
 		fig, ax = plt.subplots(figsize=(10.0, 5.0))
+		# Companion figure: std-only across subjects per position.
+		fig_std, ax_std = plt.subplots(figsize=(10.0, 5.0))
+		have_std = False
 		for pos in positions:
 			pos_df = sub[sub["position"] == pos]
 			if pos_df.empty:
 				continue
 			agg = (
-				pos_df.groupby("slice_interp")[metric]
+				pos_df.groupby("slice_interp")["_smoothed"]
 				.agg(["mean", "std", "count"])
 				.reset_index()
 				.sort_values("slice_interp")
 			)
 			color = _position_color(pos)
+			n_max = int(agg["count"].max() or 0)
 			ax.plot(
 				agg["slice_interp"],
 				agg["mean"],
 				color=color,
 				linewidth=1.6,
-				label=f"{pos} (n={int(agg['count'].max() or 0)})",
+				label=f"{pos} (n={n_max})",
 			)
 			ax.fill_between(
 				agg["slice_interp"],
@@ -436,16 +493,27 @@ def _plot_cross_subject_slice_metric(
 				alpha=0.18,
 				linewidth=0,
 			)
+			if agg["std"].notna().any():
+				ax_std.plot(
+					agg["slice_interp"],
+					agg["std"],
+					color=color,
+					linewidth=1.6,
+					label=f"{pos} (n={n_max})",
+				)
+				have_std = True
 
 		if vlevel_col is not None:
 			boundaries = _vertebra_boundaries(slices_all, slice_to_vlevel)
 			_draw_vertebra_dividers(ax, boundaries)
+			if have_std:
+				_draw_vertebra_dividers(ax_std, boundaries)
 
 		ax.legend(loc="best", fontsize=8, frameon=False, title="Position")
 		title = f"All subjects - {structure_name} - {metric}"
 		if label is not None:
 			title += f" ({label})"
-		ax.set_title(title)
+		ax.set_title(title + f" (smoothed, w={smooth_window})")
 		ax.set_xlabel("Slice (slice_interp)")
 		ax.set_ylabel(metric)
 		ax.grid(True, alpha=0.25)
@@ -456,8 +524,19 @@ def _plot_cross_subject_slice_metric(
 		_save_fig(fig, fig_path)
 		count += 1
 
-		# Second figure: per-subject overlay, one panel per position, so
-		# subject-level variability is inspectable.
+		if have_std:
+			ax_std.legend(loc="best", fontsize=8, frameon=False, title="Position")
+			ax_std.set_title(title + " - std across subjects")
+			ax_std.set_xlabel("Slice (slice_interp)")
+			ax_std.set_ylabel(f"std({metric})")
+			ax_std.grid(True, alpha=0.25)
+			std_path = outdir / f"{struct_stem}__{_safe_name(metric)}{suffix}__std.png"
+			_save_fig(fig_std, std_path)
+			count += 1
+		else:
+			plt.close(fig_std)
+
+		# Per-subject overlay, one panel per position, using smoothed values.
 		subjects = sorted(sub["subject"].dropna().unique().tolist())
 		if max_subjects and len(subjects) > max_subjects:
 			subjects = subjects[:max_subjects]
@@ -480,7 +559,7 @@ def _plot_cross_subject_slice_metric(
 					continue
 				ax_pos.plot(
 					row["slice_interp"],
-					row[metric],
+					row["_smoothed"],
 					color=subj_color[subj],
 					linewidth=1.0,
 					alpha=0.85,
@@ -508,7 +587,7 @@ def _plot_cross_subject_slice_metric(
 		title = f"Per-subject - {structure_name} - {metric}"
 		if label is not None:
 			title += f" ({label})"
-		fig.suptitle(title)
+		fig.suptitle(title + f" (smoothed, w={smooth_window})")
 
 		fig_path = outdir / f"{struct_stem}__{_safe_name(metric)}{suffix}__per_subject.png"
 		fig.tight_layout(rect=(0.0, 0.0, 0.9, 0.96))
@@ -628,6 +707,7 @@ def _plot_cross_subject_metric(
 	metric: str,
 	outdir: Path,
 	max_subjects: int,
+	smooth_window: int,
 ) -> int:
 	if _is_slice_data(df):
 		return _plot_cross_subject_slice_metric(
@@ -636,6 +716,7 @@ def _plot_cross_subject_metric(
 			metric=metric,
 			outdir=outdir,
 			max_subjects=max_subjects,
+			smooth_window=smooth_window,
 		)
 	return _plot_cross_subject_grouped_metric(
 		df,
@@ -655,6 +736,7 @@ def generate_plots(
 	outdir: Path,
 	*,
 	max_subjects: int,
+	smooth_window: int,
 ) -> Dict[str, Dict[str, int]]:
 	session_dirs = _find_session_dirs(root_dir)
 	if not session_dirs:
@@ -697,6 +779,7 @@ def generate_plots(
 					structure_name=structure_csv_name,
 					metric=metric,
 					outdir=subject_out,
+					smooth_window=smooth_window,
 				)
 		counts["per_subject"][structure_csv_name] = subj_total
 
@@ -709,6 +792,7 @@ def generate_plots(
 				metric=metric,
 				outdir=cross_root,
 				max_subjects=max_subjects,
+				smooth_window=smooth_window,
 			)
 		counts["cross_subject"][structure_csv_name] = cross_total
 
@@ -739,6 +823,15 @@ def build_argparser() -> argparse.ArgumentParser:
 		default=20,
 		help="Maximum number of subjects to overlay on per-subject panels.",
 	)
+	parser.add_argument(
+		"--smooth-window",
+		type=int,
+		default=5,
+		help=(
+			"Rolling-window size (in slices) used to smooth metrics along "
+			"slice_interp before plotting. Set to 1 to disable."
+		),
+	)
 	return parser
 
 
@@ -747,11 +840,17 @@ def main() -> None:
 	input_dir = args.input_dir
 	outdir = args.outdir or (input_dir / "plots_neckPos")
 	max_subjects = max(1, int(args.max_subjects))
+	smooth_window = max(1, int(args.smooth_window))
 
 	if not input_dir.exists():
 		raise SystemExit(f"Input folder not found: {input_dir}")
 
-	counts = generate_plots(input_dir, outdir, max_subjects=max_subjects)
+	counts = generate_plots(
+		input_dir,
+		outdir,
+		max_subjects=max_subjects,
+		smooth_window=smooth_window,
+	)
 
 	subj_total = int(sum(counts["per_subject"].values()))
 	cross_total = int(sum(counts["cross_subject"].values()))
