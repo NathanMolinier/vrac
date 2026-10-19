@@ -64,13 +64,6 @@ def _smooth(values: pd.Series, window: int) -> pd.Series:
 	return values.rolling(window=window, center=True, min_periods=1).mean()
 
 
-def _rolling_std(values: pd.Series, window: int) -> pd.Series:
-	if values.empty:
-		return values
-	w = max(int(window) if window else 1, 2)
-	return values.rolling(window=w, center=True, min_periods=2).std()
-
-
 def _parse_subject_position(folder_name: str) -> Optional[Tuple[str, str]]:
 	sub_match = SUBJECT_RE.search(folder_name)
 	pos_match = SESSION_RE.search(folder_name)
@@ -219,6 +212,48 @@ def _partitions_by_structure(df: pd.DataFrame) -> List[Tuple[Optional[str], pd.D
 	return [(None, df)]
 
 
+def _position_std_and_diffs(
+	sub: pd.DataFrame,
+	metric: str,
+	positions: Sequence[str],
+	smooth_window: int,
+) -> Tuple[Optional[pd.Series], Dict[str, pd.Series]]:
+	"""Per-subject (or per-partition) between-position variability along slices.
+
+	For each position present in `positions`, smooth the metric along
+	slice_interp, align across positions on slice_interp, then compute per-slice
+	std across positions and all pairwise absolute differences. Series are
+	indexed by slice_interp.
+	"""
+	smoothed: Dict[str, pd.Series] = {}
+	for pos in positions:
+		row = sub[sub["position"] == pos].sort_values("slice_interp")
+		if row.empty:
+			continue
+		s = pd.Series(
+			_smooth(row[metric], smooth_window).values,
+			index=row["slice_interp"].values,
+		)
+		# Collapse any duplicate slices (rare).
+		s = s.groupby(s.index).mean()
+		smoothed[pos] = s
+
+	if len(smoothed) < 2:
+		return None, {}
+
+	df_pos = pd.DataFrame(smoothed).sort_index()
+	std_series = df_pos.std(axis=1, ddof=1, skipna=True)
+
+	abs_diffs: Dict[str, pd.Series] = {}
+	pos_list = list(df_pos.columns)
+	for i in range(len(pos_list)):
+		for j in range(i + 1, len(pos_list)):
+			a, b = pos_list[i], pos_list[j]
+			abs_diffs[f"{a}_vs_{b}"] = (df_pos[a] - df_pos[b]).abs()
+
+	return std_series, abs_diffs
+
+
 # ---------------------------------------------------------------------------
 # Per-subject plots
 # ---------------------------------------------------------------------------
@@ -252,9 +287,11 @@ def _plot_subject_slice_metric(
 		if not positions:
 			continue
 
+		boundaries = (
+			_vertebra_boundaries(slices, slice_to_vlevel) if vlevel_col else []
+		)
+
 		fig, ax = plt.subplots(figsize=(10.0, 5.0))
-		fig_std, ax_std = plt.subplots(figsize=(10.0, 5.0))
-		have_std = False
 		for pos in positions:
 			row = sub[sub["position"] == pos].sort_values("slice_interp")
 			if row.empty:
@@ -270,23 +307,9 @@ def _plot_subject_slice_metric(
 				color=_position_color(pos),
 				label=pos,
 			)
-			rolling_std = _rolling_std(row[metric], smooth_window)
-			if rolling_std.notna().any():
-				ax_std.plot(
-					row["slice_interp"],
-					rolling_std,
-					linewidth=1.2,
-					alpha=0.9,
-					color=_position_color(pos),
-					label=pos,
-				)
-				have_std = True
 
-		if vlevel_col is not None:
-			boundaries = _vertebra_boundaries(slices, slice_to_vlevel)
+		if boundaries:
 			_draw_vertebra_dividers(ax, boundaries)
-			if have_std:
-				_draw_vertebra_dividers(ax_std, boundaries)
 
 		ax.legend(loc="best", fontsize=8, frameon=False, title="Position")
 		title = f"{subject} - {structure_name} - {metric}"
@@ -303,17 +326,48 @@ def _plot_subject_slice_metric(
 		_save_fig(fig, fig_path)
 		count += 1
 
-		if have_std:
-			ax_std.legend(loc="best", fontsize=8, frameon=False, title="Position")
-			ax_std.set_title(title + f" - rolling std (w={smooth_window})")
+		if len(positions) < 2:
+			continue
+
+		# Between-position variability: std across positions and pairwise |Δ|.
+		std_s, abs_diffs = _position_std_and_diffs(
+			sub, metric, positions, smooth_window
+		)
+
+		if std_s is not None and std_s.notna().any():
+			fig_std, ax_std = plt.subplots(figsize=(10.0, 5.0))
+			ax_std.plot(std_s.index, std_s.values, linewidth=1.5, color="#444444")
+			if boundaries:
+				_draw_vertebra_dividers(ax_std, boundaries)
+			ax_std.set_title(title + " - std between positions")
 			ax_std.set_xlabel("Slice (slice_interp)")
 			ax_std.set_ylabel(f"std({metric})")
 			ax_std.grid(True, alpha=0.25)
-			std_path = outdir / f"{struct_stem}__{_safe_name(metric)}{suffix}__std.png"
+			std_path = outdir / f"{struct_stem}__{_safe_name(metric)}{suffix}__std_pos.png"
 			_save_fig(fig_std, std_path)
 			count += 1
-		else:
-			plt.close(fig_std)
+
+		if abs_diffs:
+			fig_d, ax_d = plt.subplots(figsize=(10.0, 5.0))
+			plotted = False
+			for pair_key, s in abs_diffs.items():
+				if not s.notna().any():
+					continue
+				ax_d.plot(s.index, s.values, linewidth=1.3, label=pair_key)
+				plotted = True
+			if plotted:
+				if boundaries:
+					_draw_vertebra_dividers(ax_d, boundaries)
+				ax_d.legend(loc="best", fontsize=8, frameon=False, title="Pair")
+				ax_d.set_title(title + " - |Δ| between positions")
+				ax_d.set_xlabel("Slice (slice_interp)")
+				ax_d.set_ylabel(f"|Δ {metric}|")
+				ax_d.grid(True, alpha=0.25)
+				d_path = outdir / f"{struct_stem}__{_safe_name(metric)}{suffix}__absdiff_pos.png"
+				_save_fig(fig_d, d_path)
+				count += 1
+			else:
+				plt.close(fig_d)
 	return count
 
 
@@ -433,7 +487,7 @@ def _plot_cross_subject_slice_metric(
 	max_subjects: int,
 	smooth_window: int,
 ) -> int:
-	"""x=slice_interp, mean +/- std across subjects, one band per position."""
+	"""x=slice_interp, smoothed per-position mean curves across subjects."""
 	count = 0
 	for label, sub in _partitions_by_structure(df):
 		if sub.empty:
@@ -452,6 +506,9 @@ def _plot_cross_subject_slice_metric(
 		slice_to_vlevel = (
 			_slice_to_vlevel_map(sub, slices_all, vlevel_col) if vlevel_col else {}
 		)
+		boundaries = (
+			_vertebra_boundaries(slices_all, slice_to_vlevel) if vlevel_col else []
+		)
 
 		# Smooth each (subject, position) trajectory before aggregating.
 		sub = sub.copy()
@@ -461,18 +518,15 @@ def _plot_cross_subject_slice_metric(
 			.transform(lambda s: _smooth(s, smooth_window))
 		)
 
-		# One figure: smoothed mean +/- std across subjects per position.
+		# Smoothed per-position mean curves across subjects.
 		fig, ax = plt.subplots(figsize=(10.0, 5.0))
-		# Companion figure: std-only across subjects per position.
-		fig_std, ax_std = plt.subplots(figsize=(10.0, 5.0))
-		have_std = False
 		for pos in positions:
 			pos_df = sub[sub["position"] == pos]
 			if pos_df.empty:
 				continue
 			agg = (
 				pos_df.groupby("slice_interp")["_smoothed"]
-				.agg(["mean", "std", "count"])
+				.agg(["mean", "count"])
 				.reset_index()
 				.sort_values("slice_interp")
 			)
@@ -485,29 +539,9 @@ def _plot_cross_subject_slice_metric(
 				linewidth=1.6,
 				label=f"{pos} (n={n_max})",
 			)
-			ax.fill_between(
-				agg["slice_interp"],
-				agg["mean"] - agg["std"].fillna(0.0),
-				agg["mean"] + agg["std"].fillna(0.0),
-				color=color,
-				alpha=0.18,
-				linewidth=0,
-			)
-			if agg["std"].notna().any():
-				ax_std.plot(
-					agg["slice_interp"],
-					agg["std"],
-					color=color,
-					linewidth=1.6,
-					label=f"{pos} (n={n_max})",
-				)
-				have_std = True
 
-		if vlevel_col is not None:
-			boundaries = _vertebra_boundaries(slices_all, slice_to_vlevel)
+		if boundaries:
 			_draw_vertebra_dividers(ax, boundaries)
-			if have_std:
-				_draw_vertebra_dividers(ax_std, boundaries)
 
 		ax.legend(loc="best", fontsize=8, frameon=False, title="Position")
 		title = f"All subjects - {structure_name} - {metric}"
@@ -523,18 +557,6 @@ def _plot_cross_subject_slice_metric(
 		fig_path = outdir / f"{struct_stem}__{_safe_name(metric)}{suffix}__summary.png"
 		_save_fig(fig, fig_path)
 		count += 1
-
-		if have_std:
-			ax_std.legend(loc="best", fontsize=8, frameon=False, title="Position")
-			ax_std.set_title(title + " - std across subjects")
-			ax_std.set_xlabel("Slice (slice_interp)")
-			ax_std.set_ylabel(f"std({metric})")
-			ax_std.grid(True, alpha=0.25)
-			std_path = outdir / f"{struct_stem}__{_safe_name(metric)}{suffix}__std.png"
-			_save_fig(fig_std, std_path)
-			count += 1
-		else:
-			plt.close(fig_std)
 
 		# Per-subject overlay, one panel per position, using smoothed values.
 		subjects = sorted(sub["subject"].dropna().unique().tolist())
@@ -568,8 +590,7 @@ def _plot_cross_subject_slice_metric(
 			ax_pos.set_title(pos)
 			ax_pos.set_xlabel("Slice (slice_interp)")
 			ax_pos.grid(True, alpha=0.25)
-			if vlevel_col is not None:
-				boundaries = _vertebra_boundaries(slices_all, slice_to_vlevel)
+			if boundaries:
 				_draw_vertebra_dividers(ax_pos, boundaries)
 
 		axes[0][0].set_ylabel(metric)
@@ -594,6 +615,92 @@ def _plot_cross_subject_slice_metric(
 		fig.savefig(fig_path, dpi=180)
 		plt.close(fig)
 		count += 1
+
+		# Group-level between-position variability: average each subject's
+		# std-across-positions / pairwise |Δ| across subjects.
+		subj_std_series: List[pd.Series] = []
+		subj_diff_series: Dict[str, List[pd.Series]] = {}
+		for subj in sorted(sub["subject"].dropna().unique().tolist()):
+			subj_df = sub[sub["subject"] == subj]
+			subj_positions = sorted(
+				subj_df["position"].dropna().unique().tolist(),
+				key=_position_sort_key,
+			)
+			if len(subj_positions) < 2:
+				continue
+			std_s, abs_diffs = _position_std_and_diffs(
+				subj_df, metric, subj_positions, smooth_window
+			)
+			if std_s is not None and std_s.notna().any():
+				subj_std_series.append(std_s.rename(subj))
+			for pair_key, s in abs_diffs.items():
+				if s.notna().any():
+					subj_diff_series.setdefault(pair_key, []).append(s.rename(subj))
+
+		title_base = f"All subjects - {structure_name} - {metric}"
+		if label is not None:
+			title_base += f" ({label})"
+
+		if subj_std_series:
+			std_df = pd.concat(subj_std_series, axis=1).sort_index()
+			n_subj = int(std_df.notna().any(axis=0).sum())
+			mean_std = std_df.mean(axis=1, skipna=True)
+			sem_std = std_df.std(axis=1, skipna=True).fillna(0.0)
+
+			fig_s, ax_s = plt.subplots(figsize=(10.0, 5.0))
+			ax_s.plot(
+				mean_std.index,
+				mean_std.values,
+				linewidth=1.6,
+				color="#444444",
+				label=f"mean (n={n_subj})",
+			)
+			ax_s.fill_between(
+				mean_std.index,
+				mean_std.values - sem_std.values,
+				mean_std.values + sem_std.values,
+				color="#444444",
+				alpha=0.18,
+				linewidth=0,
+			)
+			if boundaries:
+				_draw_vertebra_dividers(ax_s, boundaries)
+			ax_s.legend(loc="best", fontsize=8, frameon=False)
+			ax_s.set_title(title_base + " - mean std between positions")
+			ax_s.set_xlabel("Slice (slice_interp)")
+			ax_s.set_ylabel(f"std({metric})")
+			ax_s.grid(True, alpha=0.25)
+			path = outdir / f"{struct_stem}__{_safe_name(metric)}{suffix}__mean_std_pos.png"
+			_save_fig(fig_s, path)
+			count += 1
+
+		if subj_diff_series:
+			fig_d, ax_d = plt.subplots(figsize=(10.0, 5.0))
+			plotted = False
+			for pair_key, series_list in subj_diff_series.items():
+				diff_df = pd.concat(series_list, axis=1).sort_index()
+				n_pair = int(diff_df.notna().any(axis=0).sum())
+				mean_diff = diff_df.mean(axis=1, skipna=True)
+				ax_d.plot(
+					mean_diff.index,
+					mean_diff.values,
+					linewidth=1.4,
+					label=f"{pair_key} (n={n_pair})",
+				)
+				plotted = True
+			if plotted:
+				if boundaries:
+					_draw_vertebra_dividers(ax_d, boundaries)
+				ax_d.legend(loc="best", fontsize=8, frameon=False, title="Pair")
+				ax_d.set_title(title_base + " - mean |Δ| between positions")
+				ax_d.set_xlabel("Slice (slice_interp)")
+				ax_d.set_ylabel(f"|Δ {metric}|")
+				ax_d.grid(True, alpha=0.25)
+				path = outdir / f"{struct_stem}__{_safe_name(metric)}{suffix}__mean_absdiff_pos.png"
+				_save_fig(fig_d, path)
+				count += 1
+			else:
+				plt.close(fig_d)
 
 	return count
 
