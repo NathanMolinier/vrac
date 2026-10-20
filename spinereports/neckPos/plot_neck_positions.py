@@ -245,11 +245,14 @@ def _position_std_and_diffs(
 	std_series = df_pos.std(axis=1, ddof=1, skipna=True)
 
 	abs_diffs: Dict[str, pd.Series] = {}
-	pos_list = list(df_pos.columns)
-	for i in range(len(pos_list)):
-		for j in range(i + 1, len(pos_list)):
-			a, b = pos_list[i], pos_list[j]
-			abs_diffs[f"{a}_vs_{b}"] = (df_pos[a] - df_pos[b]).abs()
+	down_values = df_pos["headDown"].values
+	normal_values = df_pos["headNormal"].values
+	up_values = df_pos["headUp"].values
+	max_diff = []
+	for i in range(len(down_values)):
+		val = max(down_values[i], normal_values[i], up_values[i]) - min(down_values[i], normal_values[i], up_values[i])
+		max_diff.append(val)
+	abs_diffs[f"max_diff"] = pd.Series(max_diff, index=df_pos.index)
 
 	return std_series, abs_diffs
 
