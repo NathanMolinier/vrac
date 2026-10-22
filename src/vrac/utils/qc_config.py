@@ -100,7 +100,7 @@ def _normalize_image_slice(sl):
 
 
 def _display_slice(sl):
-    # Flip so Superior is up (RSP: axis S is axis 0 of the sagittal slice).
+    # Flip so Superior is up (RIP: axis I is axis 0 of the sagittal slice).
     return np.flipud(sl)
 
 
@@ -142,12 +142,12 @@ def _gaussian_blob(shape, cy, cx, sigma):
     return np.exp(-(((ys - cy) ** 2 + (xs - cx) ** 2) / (2.0 * sigma ** 2)))
 
 
-def _overlay_labels(ax, label_volume_rsp, sagittal_shape, sigma):
+def _overlay_labels(ax, label_volume_rip, sagittal_shape, sigma):
     """Project all non-zero voxels onto the sagittal plane and draw a Gaussian
-    blob (+ value) at each (y, z) projection. ``label_volume_rsp`` is the full
-    3D volume (RSP). The sagittal plane spans axes 1 (S) and 2 (P) of RSP.
+    blob (+ value) at each (y, z) projection. ``label_volume_rip`` is the full
+    3D volume (RIP). The sagittal plane spans axes 1 (I) and 2 (P) of RIP.
     """
-    nonzero = np.argwhere(label_volume_rsp > 0)
+    nonzero = np.argwhere(label_volume_rip > 0)
     if nonzero.size == 0:
         return
 
@@ -156,7 +156,7 @@ def _overlay_labels(ax, label_volume_rsp, sagittal_shape, sigma):
     yz_to_value = {}
     for x, y, z in nonzero:
         key = (int(y), int(z))
-        v = label_volume_rsp[x, y, z]
+        v = label_volume_rip[x, y, z]
         prev = yz_to_value.get(key)
         if prev is None or v > prev:
             yz_to_value[key] = v
@@ -166,7 +166,7 @@ def _overlay_labels(ax, label_volume_rsp, sagittal_shape, sigma):
     label_map = np.zeros((H, W), dtype=np.float32)
 
     for (y, z), value in yz_to_value.items():
-        # Display slice is flipud of (S, P) -> row index = (H - 1 - y), col = z
+        # Display slice is flipud of (I, P) -> row index = (H - 1 - y), col = z
         cy_disp = (H - 1) - y
         cx_disp = z
         blob = _gaussian_blob((H, W), cy_disp, cx_disp, sigma)
@@ -228,7 +228,7 @@ def _process_entry(entry, keys, datasets_root, split_out_dir, ext, sigma):
                 seg_slice, _ = _mid_sagittal_rsp(overlay_path)
                 _overlay_segmentation(ax, _display_slice(seg_slice), bg.shape)
             else:  # 'label'
-                full = Image(overlay_path).change_orientation("RSP").data
+                full = Image(overlay_path).change_orientation("RIP").data
                 if full.ndim == 4:
                     full = full[..., 0]
                 _overlay_labels(ax, full, bg.shape, sigma)
