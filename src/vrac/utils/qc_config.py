@@ -78,7 +78,7 @@ def _parse_keys(raw_keys):
 
 
 def _mid_sagittal_rsp(nii_path):
-    img = Image(nii_path).change_orientation("RSP")
+    img = Image(nii_path).change_orientation("RIP")
     data = img.data
     if data.ndim == 4:
         data = data[..., 0]
