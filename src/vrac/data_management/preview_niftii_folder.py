@@ -2,7 +2,7 @@
 Scan a folder tree for NIfTI (.nii.gz) files and write a sagittal mid-slice
 preview (PNG or JPG) for each 3D volume into an output folder.
 
-Images are reoriented to RSP (via vrac.data_management.image.Image) so the
+Images are reoriented to RIP (via vrac.data_management.image.Image) so the
 sagittal slice is always the middle index along axis 0.
 """
 
@@ -62,7 +62,7 @@ def _relative_output_name(nii_path, input_root, ext):
 
 def _process_one(nii_path, input_root, output_folder, ext, percentile):
     try:
-        img = Image(nii_path).change_orientation('RSP')
+        img = Image(nii_path).change_orientation('RIP')
         data = img.data
         if data.ndim == 4:
             data = data[..., 0]
