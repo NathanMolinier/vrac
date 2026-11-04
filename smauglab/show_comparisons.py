@@ -21,16 +21,28 @@ import pandas as pd
 
 SUMMARY_FILE = "comparison_summary_by_modality.csv"
 LABELS_PER_ROW_TARGET = 25
-OSSTA_MODEL = "nnUNetTrainerDAExtGPU_OSSTA"
+FIXED_COLORS = (
+    ("synthseg", "tab:green"),
+    ("ossta", "tab:orange"),
+)
+FALLBACK_COLORS = ["tab:blue", "tab:red", "tab:purple", "tab:brown",
+                   "tab:pink", "tab:gray", "tab:olive", "tab:cyan"]
 
 
-def model_colors(models: list[str]) -> dict[str, str] | None:
-    """Fixed palette when OSSTA is present with exactly one other model."""
-    ossta = [m for m in models if OSSTA_MODEL in m]
-    others = [m for m in models if OSSTA_MODEL not in m]
-    if len(ossta) == 1 and len(others) == 1:
-        return {ossta[0]: "tab:orange", others[0]: "tab:blue"}
-    return None
+def model_colors(models: list[str]) -> dict[str, str]:
+    """SynthSeg -> green, OSSTA -> orange, remaining models -> blue, then others."""
+    colors = {}
+    remaining = []
+    for m in models:
+        name = m.lower()
+        color = next((c for key, c in FIXED_COLORS if key in name), None)
+        if color is None:
+            remaining.append(m)
+        else:
+            colors[m] = color
+    for m, c in zip(remaining, FALLBACK_COLORS):
+        colors[m] = c
+    return colors
 
 
 def parse_args():
@@ -124,7 +136,7 @@ def plot_metric_modality(
                 yerr=np.nan_to_num(stds),
                 capsize=3,
                 label=model if r == 0 else None,
-                color=colors[model] if colors else None,
+                color=colors.get(model),
             )
         ax.set_xticks(x)
         ax.set_xticklabels(chunk, rotation=45, ha="right")
