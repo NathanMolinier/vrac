@@ -17,8 +17,13 @@ time). Nothing is changed in BIDS or in the JSONs until you run ``qc_apply.py``.
 Usage:
     python qc_review.py <qc_dir> [--port 8765] [--order f1|name] [--no-browser]
 
-Remote data: run it on the server, then ``ssh -L 8765:localhost:8765 <server>``
-and open http://localhost:8765 locally.
+Remote data, two options:
+  * run it on the server, then ``ssh -L 8765:localhost:8765 <server>`` and open
+    http://localhost:8765 locally;
+  * or review offline: ``qc_bundle.py`` on the server, copy + extract the bundle
+    locally and run ``qc_review.py <bundle_dir>`` (no NIfTI needed — prediction
+    availability comes from ``review_manifest.json``). Send the resulting
+    ``qc_decisions.json`` back and use ``qc_apply.py --decisions``.
 """
 
 from __future__ import annotations
@@ -53,6 +58,16 @@ def load_samples(qc_dir: str, tolerance_mm: float, order: str) -> list:
         with open(metrics_path) as f:
             per_image = {p["image"]: p for p in json.load(f)["per_image"]}
 
+    # Offline bundle: predictions/ is not copied, the manifest says which exist.
+    manifest = {}
+    manifest_path = os.path.join(qc_dir, "review_manifest.json")
+    pred_dir = os.path.join(qc_dir, "predictions")
+    if os.path.isfile(manifest_path):
+        with open(manifest_path) as f:
+            manifest = json.load(f).get("predictions", {})
+    elif not os.path.isdir(pred_dir):
+        print(f"[review] WARN: neither {pred_dir} nor {manifest_path} — no prediction can be chosen")
+
     samples = []
     for stem, s in index["samples"].items():
         if s.get("missing"):
@@ -67,7 +82,8 @@ def load_samples(qc_dir: str, tolerance_mm: float, order: str) -> list:
             "image": s["image"],
             "label": s["label"],
             "uses": [f"{os.path.basename(u['json'])}:{u['split']}" for u in s["uses"]],
-            "has_pred": os.path.isfile(os.path.join(qc_dir, "predictions", f"{stem}_discs.nii.gz")),
+            "has_pred": stem in manifest or os.path.isfile(os.path.join(pred_dir, f"{stem}_discs.nii.gz")),
+            "pred_sha256": manifest.get(stem),
             "has_preview": os.path.isfile(os.path.join(qc_dir, "metrics", "previews", f"{stem}.png")),
             "f1": None if p is None else round(image_f1(p, tolerance_mm), 3),
             "n_gt": None if p is None else p["n_gt"],
@@ -94,13 +110,19 @@ class Store:
             with open(path) as f:
                 self.data = json.load(f)
 
-    def update(self, stem: str, decision=None, comment=None, clear=False) -> dict:
+    def update(self, stem: str, decision=None, comment=None, clear=False, pred_sha256=None) -> dict:
         with self.lock:
             rec = dict(self.data.get(stem, {}))
             if clear:
                 rec.pop("decision", None)
             if decision is not None:
                 rec["decision"] = decision
+            if "decision" in rec or clear:
+                # Prediction reviewed: remember which file, qc_apply checks it is unchanged.
+                if rec.get("decision") == "prediction" and pred_sha256:
+                    rec["pred_sha256"] = pred_sha256
+                elif rec.get("decision") != "prediction":
+                    rec.pop("pred_sha256", None)
             if comment is not None:
                 rec["comment"] = comment
                 if not comment:
@@ -294,7 +316,7 @@ fetch('api/state').then(r => r.json()).then(st => {
 
 def make_handler(qc_dir: str, samples: list, store: Store):
     previews = os.path.join(qc_dir, "metrics", "previews")
-    stems = {s["stem"] for s in samples}
+    stems = {s["stem"]: s for s in samples}
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
@@ -341,7 +363,7 @@ def make_handler(qc_dir: str, samples: list, store: Store):
             except Exception as exc:  # noqa: BLE001
                 return self._send(400, str(exc).encode(), "text/plain")
             rec = store.update(stem, decision=decision, comment=body.get("comment"),
-                               clear=bool(body.get("clear")))
+                               clear=bool(body.get("clear")), pred_sha256=stems[stem].get("pred_sha256"))
             self._json(rec)
 
     return Handler

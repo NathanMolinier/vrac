@@ -10,8 +10,11 @@
 #                          colours as the evaluation `errors/` folder
 #   <qc_dir>/qc_index.json where each sample comes from (BIDS paths, JSON/split)
 #
-# Then review with:  python qc_review.py <qc_dir>
-# And apply with:    python qc_apply.py  <qc_dir>
+#   <qc_dir>/qc_review_bundle.tar.gz  previews + metadata only, to review on
+#                          another machine (see qc_bundle.py)
+#
+# Then review with:  python qc_review.py <qc_dir>          (here, or on the extracted bundle)
+# And apply with:    python qc_apply.py  <qc_dir> [--decisions <reviewed qc_decisions.json>]
 #
 # Usage:
 #   qc_prepare.sh <pipeline-config.json> <qc_dir> [2d|3d]
@@ -24,7 +27,7 @@
 #   DISCSLABEL_REPO   discs-labeling-multicontrast checkout (default: the
 #                     location of the installed `discslabel` package)
 #   QC_SKELETON       off | flag | correct  (default: config inference_skeleton, else off)
-#   QC_STEPS          steps to run, default "stage inference evaluate"
+#   QC_STEPS          steps to run, default "stage inference evaluate bundle"
 
 set -e
 trap "echo Caught Keyboard Interrupt within script. Exiting now.; exit" INT
@@ -45,7 +48,7 @@ config_json="$(realpath "$config_json")"
 mkdir -p "$QC_DIR"
 QC_DIR="$(realpath "$QC_DIR")"
 SCRIPT_DIR="$(realpath "$(dirname "$0")")"
-QC_STEPS="${QC_STEPS:-stage inference evaluate}"
+QC_STEPS="${QC_STEPS:-stage inference evaluate bundle}"
 
 if [ -z "$DISCSLABEL_REPO" ]; then
     DISCSLABEL_REPO=$(python -c "import discslabel, os; print(os.path.dirname(list(discslabel.__path__)[0]))")
@@ -134,7 +137,13 @@ if [[ " $QC_STEPS " == *" evaluate "* ]]; then
         --previews all
 fi
 
+# -------- 4. Lightweight bundle for an offline review --------
+if [[ " $QC_STEPS " == *" bundle "* ]]; then
+    echo "==> bundling previews for offline review"
+    python "$SCRIPT_DIR/qc_bundle.py" "$QC_DIR"
+fi
+
 echo ""
 echo "QC folder ready: $QC_DIR"
-echo "Review:  python $SCRIPT_DIR/qc_review.py $QC_DIR"
-echo "Apply:   python $SCRIPT_DIR/qc_apply.py $QC_DIR --dry-run"
+echo "Review here:  python $SCRIPT_DIR/qc_review.py $QC_DIR"
+echo "Apply:        python $SCRIPT_DIR/qc_apply.py $QC_DIR [--decisions <file>] --dry-run"

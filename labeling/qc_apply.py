@@ -13,7 +13,14 @@ For every sample in ``<qc_dir>/qc_decisions.json``:
 Applied samples are logged in ``<qc_dir>/qc_applied.json``.
 
 Usage:
-    python qc_apply.py <qc_dir> [--dry-run] [--json-dir <repo>/discslabel/datasets] [--bids-root <bids>]
+    python qc_apply.py <qc_dir> [--dry-run] [--decisions <file>]
+                       [--json-dir <repo>/discslabel/datasets] [--bids-root <bids>]
+
+``--decisions`` applies a ``qc_decisions.json`` reviewed on another machine (see
+``qc_bundle.py``). On a real run it becomes ``<qc_dir>/qc_decisions.json`` (the previous
+one is kept as ``qc_decisions.<timestamp>.bak.json``). When a decision carries a
+``pred_sha256`` (offline review), the prediction is only written if the file on disk
+is still the one that was reviewed.
 
 ``--json-dir`` / ``--bids-root`` override the paths stored at staging time (e.g. when
 the review was done on another machine than the one that ran ``qc_prepare.sh``).
@@ -24,6 +31,7 @@ and the JSONs in discs-labeling-multicontrast, then re-run the ``prepare`` step.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
@@ -37,6 +45,14 @@ def sidecar_of(label_path: str) -> str:
         if label_path.endswith(ext):
             return label_path[: -len(ext)] + ".json"
     return label_path + ".json"
+
+
+def sha256_of(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def replace_label(pred: str, dst: str, backup: str, run_name: str, dry_run: bool) -> None:
@@ -79,6 +95,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("qc_dir")
     parser.add_argument("--dry-run", action="store_true", help="Only print what would change.")
+    parser.add_argument("--decisions", default=None,
+                        help="Decisions file to apply (default: <qc_dir>/qc_decisions.json).")
     parser.add_argument("--json-dir", default=None, help="Folder holding the discslabel JSONs (overrides qc_index.json).")
     parser.add_argument("--bids-root", default=None, help="BIDS root (overrides qc_index.json).")
     args = parser.parse_args()
@@ -86,11 +104,26 @@ def main() -> None:
     qc_dir = os.path.abspath(args.qc_dir)
     with open(os.path.join(qc_dir, "qc_index.json")) as f:
         index = json.load(f)
-    dec_path = os.path.join(qc_dir, "qc_decisions.json")
+    local_dec = os.path.join(qc_dir, "qc_decisions.json")
+    dec_path = os.path.abspath(args.decisions) if args.decisions else local_dec
     if not os.path.isfile(dec_path):
         raise SystemExit(f"no decisions yet ({dec_path}); run qc_review.py first")
     with open(dec_path) as f:
         decisions = json.load(f)
+    unknown = sorted(st for st in decisions if st not in index["samples"])
+    if unknown:
+        print(f"[apply] WARN: {len(unknown)} decision(s) for stems not in qc_index.json "
+              f"(different QC run?), ignored: {', '.join(unknown[:5])}{' ...' if len(unknown) > 5 else ''}")
+    if dec_path != local_dec and not args.dry_run:
+        # Keep the qc_dir self-describing: the applied decisions live next to qc_applied.json.
+        if os.path.isfile(local_dec):
+            with open(local_dec) as f:
+                old = json.load(f)
+            if old != decisions:
+                bak = os.path.join(qc_dir, f"qc_decisions.{datetime.now():%Y%m%d-%H%M%S}.bak.json")
+                os.replace(local_dec, bak)
+                print(f"[apply] previous {local_dec} moved to {bak}")
+        shutil.copyfile(dec_path, local_dec)
     applied_path = os.path.join(qc_dir, "qc_applied.json")
     applied = {}
     if os.path.isfile(applied_path):
@@ -123,12 +156,19 @@ def main() -> None:
 
     # ---- Replace GT by prediction in BIDS ----
     n_replaced = 0
+    changed = []
     for stem in by_kind["prediction"]:
         if applied.get(stem) == "prediction":
             continue
         label_rel = index["samples"][stem]["label"]
+        pred = os.path.join(qc_dir, "predictions", f"{stem}_discs.nii.gz")
+        want = decisions[stem].get("pred_sha256")
+        if want and os.path.isfile(pred) and sha256_of(pred) != want:
+            changed.append(stem)
+            print(f"  SKIP {stem}: prediction changed since it was reviewed")
+            continue
         replace_label(
-            pred=os.path.join(qc_dir, "predictions", f"{stem}_discs.nii.gz"),
+            pred=pred,
             dst=os.path.join(bids_root, label_rel),
             backup=os.path.join(qc_dir, "backup_gt", label_rel),
             run_name=run_name,
@@ -174,6 +214,9 @@ def main() -> None:
 
     prefix = "[apply] (dry run) would have" if args.dry_run else "[apply]"
     print(f"{prefix} replaced {n_replaced} BIDS label(s), removed {n_dropped} JSON entr(ies)")
+    if changed:
+        print(f"[apply] {len(changed)} prediction(s) skipped because they changed after review — "
+              f"re-bundle and review them again: {', '.join(changed)}")
 
 
 if __name__ == "__main__":
