@@ -47,6 +47,16 @@ def sidecar_of(label_path: str) -> str:
     return label_path + ".json"
 
 
+def load_json(path: str):
+    """``json.load`` that names the offending file on a syntax error."""
+    with open(path) as f:
+        try:
+            return json.load(f)
+        except json.JSONDecodeError as exc:
+            raise SystemExit(f"[apply] invalid JSON in {path}: {exc}\n"
+                             f"        nothing was changed by this run; fix the file and rerun") from None
+
+
 def sha256_of(path: str) -> str:
     h = hashlib.sha256()
     with open(path, "rb") as f:
@@ -72,8 +82,7 @@ def replace_label(pred: str, dst: str, backup: str, run_name: str, dry_run: bool
 
     sidecar = sidecar_of(dst)
     if os.path.lexists(sidecar):
-        with open(sidecar) as f:
-            meta = json.load(f)
+        meta = load_json(sidecar)
         gen = []
         gen.append({
             "Name": "discslabel prediction",
@@ -102,39 +111,25 @@ def main() -> None:
     args = parser.parse_args()
 
     qc_dir = os.path.abspath(args.qc_dir)
-    with open(os.path.join(qc_dir, "qc_index.json")) as f:
-        index = json.load(f)
+    index = load_json(os.path.join(qc_dir, "qc_index.json"))
     local_dec = os.path.join(qc_dir, "qc_decisions.json")
     dec_path = os.path.abspath(args.decisions) if args.decisions else local_dec
     if not os.path.isfile(dec_path):
         raise SystemExit(f"no decisions yet ({dec_path}); run qc_review.py first")
-    with open(dec_path) as f:
-        decisions = json.load(f)
+    decisions = load_json(dec_path)
     unknown = sorted(st for st in decisions if st not in index["samples"])
     if unknown:
         print(f"[apply] WARN: {len(unknown)} decision(s) for stems not in qc_index.json "
               f"(different QC run?), ignored: {', '.join(unknown[:5])}{' ...' if len(unknown) > 5 else ''}")
-    if dec_path != local_dec and not args.dry_run:
-        # Keep the qc_dir self-describing: the applied decisions live next to qc_applied.json.
-        if os.path.isfile(local_dec):
-            with open(local_dec) as f:
-                old = json.load(f)
-            if old != decisions:
-                bak = os.path.join(qc_dir, f"qc_decisions.{datetime.now():%Y%m%d-%H%M%S}.bak.json")
-                os.replace(local_dec, bak)
-                print(f"[apply] previous {local_dec} moved to {bak}")
-        shutil.copyfile(dec_path, local_dec)
     applied_path = os.path.join(qc_dir, "qc_applied.json")
     applied = {}
     if os.path.isfile(applied_path):
-        with open(applied_path) as f:
-            applied = json.load(f)
+        applied = load_json(applied_path)
 
     run_name = ""
     cfg_path = os.path.join(qc_dir, "config.json")
     if os.path.isfile(cfg_path):
-        with open(cfg_path) as f:
-            run_name = json.load(f).get("run_name", "")
+        run_name = load_json(cfg_path).get("run_name", "")
 
     bids_root = args.bids_root or index["bids_root"]
 
@@ -153,6 +148,26 @@ def main() -> None:
                   f"not reverted automatically (backup GT: {os.path.join(qc_dir, 'backup_gt')})")
     print(f"[apply] prediction={len(by_kind['prediction'])} drop={len(by_kind['drop'])} "
           f"keep={len(by_kind['keep'])}{'  (dry run)' if args.dry_run else ''}")
+
+    # ---- Pre-flight: parse every JSON this run will touch, before changing anything ----
+    for stem in by_kind["prediction"]:
+        if applied.get(stem) != "prediction":
+            sidecar = sidecar_of(os.path.join(bids_root, index["samples"][stem]["label"]))
+            if os.path.lexists(sidecar):
+                load_json(sidecar)
+    for stem in by_kind["drop"]:
+        for use in index["samples"][stem]["uses"]:
+            load_json(json_path(use["json"]))
+
+    if dec_path != local_dec and not args.dry_run:
+        # Keep the qc_dir self-describing: the applied decisions live next to qc_applied.json.
+        if os.path.isfile(local_dec):
+            old = load_json(local_dec)
+            if old != decisions:
+                bak = os.path.join(qc_dir, f"qc_decisions.{datetime.now():%Y%m%d-%H%M%S}.bak.json")
+                os.replace(local_dec, bak)
+                print(f"[apply] previous {local_dec} moved to {bak}")
+        shutil.copyfile(dec_path, local_dec)
 
     # ---- Replace GT by prediction in BIDS ----
     n_replaced = 0
@@ -186,8 +201,7 @@ def main() -> None:
             drop_images.setdefault(json_path(use["json"]), set()).add(s["image"])
     n_dropped = 0
     for jp, images in sorted(drop_images.items()):
-        with open(jp) as f:
-            data = json.load(f)
+        data = load_json(jp)
         removed = []
         for split in SPLITS:
             if split not in data:
