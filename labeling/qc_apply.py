@@ -65,6 +65,16 @@ def sha256_of(path: str) -> str:
     return h.hexdigest()
 
 
+def read_sidecar(path: str) -> dict:
+    """Label sidecar content, or ``{}`` when it is not valid JSON (it then gets overwritten)."""
+    with open(path) as f:
+        try:
+            return json.load(f)
+        except json.JSONDecodeError as exc:
+            print(f"  WARN invalid sidecar, its content will be replaced: {path} ({exc})")
+            return {}
+
+
 def replace_label(pred: str, dst: str, backup: str, run_name: str, dry_run: bool) -> None:
     if not os.path.isfile(pred):
         raise FileNotFoundError(f"prediction missing: {pred}")
@@ -82,7 +92,7 @@ def replace_label(pred: str, dst: str, backup: str, run_name: str, dry_run: bool
 
     sidecar = sidecar_of(dst)
     if os.path.lexists(sidecar):
-        meta = load_json(sidecar)
+        meta = read_sidecar(sidecar)
         gen = []
         gen.append({
             "Name": "discslabel prediction",
@@ -149,12 +159,13 @@ def main() -> None:
     print(f"[apply] prediction={len(by_kind['prediction'])} drop={len(by_kind['drop'])} "
           f"keep={len(by_kind['keep'])}{'  (dry run)' if args.dry_run else ''}")
 
-    # ---- Pre-flight: parse every JSON this run will touch, before changing anything ----
+    # ---- Pre-flight: parse every dataset JSON this run will touch, before changing anything ----
+    # (invalid label sidecars are not an error: they are overwritten in replace_label)
     for stem in by_kind["prediction"]:
         if applied.get(stem) != "prediction":
             sidecar = sidecar_of(os.path.join(bids_root, index["samples"][stem]["label"]))
-            if os.path.lexists(sidecar):
-                load_json(sidecar)
+            if os.path.lexists(sidecar) and args.dry_run:
+                read_sidecar(sidecar)  # just report it
     for stem in by_kind["drop"]:
         for use in index["samples"][stem]["uses"]:
             load_json(json_path(use["json"]))
