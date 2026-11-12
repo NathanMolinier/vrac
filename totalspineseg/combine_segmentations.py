@@ -27,7 +27,11 @@ def main():
         spine.data[cord.data > 0] = 1  # Cord
 
         # Save the combined segmentation
-        output_path = os.path.join("/home/ge.polymtl.ca/p118739/data/totalspineseg_data/sc-crop/labels", stem)
+        output_dir = "/home/ge.polymtl.ca/p118739/data/totalspineseg_data/sc-crop/labels"
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        
+        output_path = os.path.join(output_dir, stem)
         spine.save(output_path)
         print(f"Saved combined segmentation to {output_path}")
 
