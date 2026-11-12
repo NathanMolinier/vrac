@@ -11,7 +11,7 @@ def main():
             raise ValueError(f"Unexpected file format: {canal_name}")
         stem = canal_name.replace("_label-canal_seg", "")
         canal_path = os.path.join(canal_seg_path, canal_name)
-        cord_path = os.path.join(cord_seg_path, stem.replace(".nii.gz", "_label-cord_seg.nii.gz"))
+        cord_path = os.path.join(cord_seg_path, stem.replace(".nii.gz", "_label-SC_seg.nii.gz"))
         spine_path = os.path.join(spine_seg_path, stem.replace(".nii.gz", "_label-spine_dseg.nii.gz"))
 
         # Load images
