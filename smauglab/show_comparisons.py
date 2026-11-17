@@ -23,6 +23,7 @@ SUMMARY_FILE = "comparison_summary_by_modality.csv"
 LABELS_PER_ROW_TARGET = 25
 FIXED_COLORS = (
     ("synthseg", "tab:green"),
+    ("ossta_noflip", "#b35900"),  # dark orange; must precede "ossta" (first substring match wins)
     ("ossta", "tab:orange"),
 )
 FALLBACK_COLORS = ["tab:blue", "tab:red", "tab:purple", "tab:brown",
