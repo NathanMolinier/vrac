@@ -10,6 +10,11 @@ per label and one box per selected method. When there are many labels (e.g.
 TotalSegmentator's 117 classes) the labels are split across several stacked
 rows so the figure stays roughly square.
 
+Next to each plot, a table image (``<metric>_<modality>_table.png``) gives the
+boxplot values per label and method as ``median [Q1, Q3]``, and a CSV
+(``<metric>_<modality>_table.csv``) holds the full box statistics (n, median,
+quartiles, whisker ends, mean, std).
+
 Methods are selected (and renamed) with ``--methods MODEL[:DISPLAY_NAME] ...``,
 e.g. ``--methods nnUNetTrainer:baseline synthseg:SynthSeg``. Methods are
 plotted in the order given. Without ``--methods`` every model is plotted under
@@ -24,6 +29,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.patches import Patch
+from matplotlib.transforms import Bbox
 
 
 PER_CASE_FILE = "comparison_long.csv"
@@ -123,25 +129,116 @@ def choose_nrows(n_labels: int, n_models: int) -> int:
     return max(1, math.ceil(n_labels / labels_per_row))
 
 
-def plot_metric_modality(
+def collect_values(
     df: pd.DataFrame,
     metric: str,
     modality: str,
     methods: dict[str, str],
-    out_path: Path,
-) -> bool:
+):
+    """Return (models, labels, {(model, label): finite values}) or None if empty."""
     sub = df[(df["modality"] == modality) & df["model"].isin(methods)]
     sub = sub[np.isfinite(sub[metric].to_numpy(dtype=float))]
     if sub.empty:
-        return False
-
+        return None
     models = [m for m in methods if m in set(sub["model"])]
     labels = sorted(sub["label"].unique())
-    colors = model_colors(models)
     values = {
         (m, lab): grp[metric].to_numpy(dtype=float)
         for (m, lab), grp in sub.groupby(["model", "label"])
     }
+    return models, labels, values
+
+
+def box_stats_table(models, labels, values, methods) -> pd.DataFrame:
+    """Long table of the statistics drawn by the boxplot (Tukey whiskers, 1.5 IQR)."""
+    rows = []
+    for lab in labels:
+        for m in models:
+            vals = values.get((m, lab))
+            if vals is None or not vals.size:
+                continue
+            q1, med, q3 = np.percentile(vals, [25, 50, 75])
+            iqr = q3 - q1
+            in_range = vals[(vals >= q1 - 1.5 * iqr) & (vals <= q3 + 1.5 * iqr)]
+            rows.append(dict(
+                label=lab, method=methods[m], n=vals.size,
+                median=med, q1=q1, q3=q3,
+                whisker_low=in_range.min(), whisker_high=in_range.max(),
+                mean=vals.mean(), std=vals.std(ddof=1) if vals.size > 1 else np.nan,
+            ))
+    return pd.DataFrame(rows)
+
+
+def save_table_image(
+    stats: pd.DataFrame,
+    models: list[str],
+    labels: list[str],
+    methods: dict[str, str],
+    title: str,
+    out_path: Path,
+) -> None:
+    """Render a label x method table with 'median [Q1, Q3]' cells as an image."""
+    names = [methods[m] for m in models]
+    span = np.nanmax(np.abs(stats[["median", "q1", "q3"]].to_numpy(dtype=float)))
+    fmt = "{:.3f}" if span < 10 else "{:.1f}"
+    lookup = stats.set_index(["label", "method"])
+    cells = []
+    for lab in labels:
+        row = []
+        for name in names:
+            if (lab, name) in lookup.index:
+                r = lookup.loc[(lab, name)]
+                row.append(f"{fmt.format(r['median'])} [{fmt.format(r['q1'])}, {fmt.format(r['q3'])}]")
+            else:
+                row.append("—")
+        cells.append(row)
+
+    colors = model_colors(models)
+    label_w = max(len(str(lab)) for lab in labels) * 0.09 + 0.4
+    col_w = max(1.9, max(len(c) for row in cells for c in row) * 0.085)
+    fig_w = label_w + col_w * len(names)
+    fig_h = 0.3 * (len(labels) + 1) + 0.7
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+    ax.axis("off")
+    table = ax.table(
+        cellText=cells,
+        rowLabels=labels,
+        colLabels=names,
+        colColours=[colors.get(m) for m in models],
+        colWidths=[col_w / fig_w] * len(names),
+        cellLoc="center",
+        loc="upper center",
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(8)
+    table.scale(1, 1.3)
+    for (r, c), cell in table.get_celld().items():
+        cell.set_linewidth(0.4)
+        if r == 0:
+            cell.set_text_props(weight="bold", color="white")
+            cell.set_alpha(0.85)
+        elif r % 2 == 0:
+            cell.set_facecolor("#f2f2f2")
+    ax.set_title(f"{title}  —  median [Q1, Q3]", fontsize=10, pad=8)
+    # Crop to the table + title only (the hidden axes would otherwise add blank space).
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    bbox = Bbox.union([table.get_window_extent(renderer), ax.title.get_window_extent(renderer)])
+    bbox = bbox.padded(10).transformed(fig.dpi_scale_trans.inverted())
+    fig.savefig(out_path, dpi=200, bbox_inches=bbox)
+    plt.close(fig)
+
+
+def plot_metric_modality(
+    models: list[str],
+    labels: list[str],
+    values: dict,
+    metric: str,
+    modality: str,
+    methods: dict[str, str],
+    out_path: Path,
+) -> None:
+    colors = model_colors(models)
 
     nrows = choose_nrows(len(labels), len(models))
     per_row = math.ceil(len(labels) / nrows)
@@ -198,7 +295,6 @@ def plot_metric_modality(
     fig.tight_layout()
     fig.savefig(out_path, dpi=150)
     plt.close(fig)
-    return True
 
 
 def main() -> None:
@@ -223,9 +319,20 @@ def main() -> None:
 
     for metric in metrics:
         for modality in modalities:
-            out_path = out_dir / f"{metric}_{modality}.png"
-            if plot_metric_modality(df, metric, modality, methods, out_path):
-                print(f"wrote {out_path}")
+            collected = collect_values(df, metric, modality, methods)
+            if collected is None:
+                continue
+            models, labels, values = collected
+
+            plot_path = out_dir / f"{metric}_{modality}.png"
+            plot_metric_modality(models, labels, values, metric, modality, methods, plot_path)
+
+            stats = box_stats_table(models, labels, values, methods)
+            csv_out = out_dir / f"{metric}_{modality}_table.csv"
+            stats.to_csv(csv_out, index=False, float_format="%.4f")
+            table_path = out_dir / f"{metric}_{modality}_table.png"
+            save_table_image(stats, models, labels, methods, f"{metric} — {modality}", table_path)
+            print(f"wrote {plot_path}, {table_path}, {csv_out}")
 
 
 if __name__ == "__main__":
